@@ -230,7 +230,7 @@ function summaryBlock(c) {
   return `
   <div class="row wrap" style="gap:18px;align-items:flex-start">
     <div style="width:150px">${gauge(conf, { label: Math.round(conf * 100) + '%', sub: 'confidence',
-      color: conf > .85 ? '#2ecc8f' : conf > .7 ? '#f5a623' : '#f2545b' })}</div>
+      color: conf > .85 ? 'var(--green)' : conf > .7 ? 'var(--amber)' : 'var(--red)' })}</div>
     <div style="flex:1;min-width:220px" class="col">
       <div class="row wrap">${tag(s.recommendation)}
         <span class="tag t-grey">disagreement ${s.disagreement}</span>
@@ -555,7 +555,7 @@ function renderTab(el, c) {
       <div class="col" style="gap:12px">
         <div class="row" style="gap:16px">
           <div style="width:140px">${gauge(Math.min(1, r.pd * 5), { label: pct(r.pd, 1), sub: 'prob. of default',
-            color: r.pd < .07 ? '#2ecc8f' : r.pd < .13 ? '#f5a623' : '#f2545b' })}</div>
+            color: r.pd < .07 ? 'var(--green)' : r.pd < .13 ? 'var(--amber)' : 'var(--red)' })}</div>
           <div class="col" style="flex:1">
             <div class="row wrap">${tag(r.grade)}<span class="tag t-grey">band ${r.band}</span>
               <span class="tag t-grey">score ${r.score}</span></div>

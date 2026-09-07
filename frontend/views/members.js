@@ -58,8 +58,8 @@ async function member360(el, mid) {
     <div class="card"><div class="card-h"><h3>Forecast</h3></div><div class="card-b col" style="gap:10px">
       <div class="row" style="gap:12px;justify-content:center">
         <div style="width:118px">${gauge(l.forecast.p_late_30d, { size: 112, label: pct(l.forecast.p_late_30d, 0), sub: '30-day late',
-          color: l.forecast.p_late_30d > .5 ? '#f2545b' : '#f5a623' })}</div>
-        <div style="width:118px">${gauge(l.forecast.recovery_likelihood, { size: 112, label: pct(l.forecast.recovery_likelihood, 0), sub: 'recovery', color: '#2ecc8f' })}</div>
+          color: l.forecast.p_late_30d > .5 ? 'var(--red)' : 'var(--amber)' })}</div>
+        <div style="width:118px">${gauge(l.forecast.recovery_likelihood, { size: 112, label: pct(l.forecast.recovery_likelihood, 0), sub: 'recovery', color: 'var(--green)' })}</div>
       </div>
       <dl class="kv">
         <dt>Personal baseline</dt><dd>${l.baseline.mean_days_late} days late (sd ${l.baseline.sd})</dd>
@@ -95,7 +95,7 @@ async function member360(el, mid) {
         <div class="small">Alert closes automatically when criteria are met; the history is retained.</div></div>` : ''}
     </div></div>
     <div class="card"><div class="card-h"><h3>Savings trajectory</h3></div><div class="card-b">
-      ${lineChart(l.savings_trend.map((v, i) => ({ d: '', v })), { keys: ['v'], h: 120, colors: ['#22d3ee'] })}
+      ${lineChart(l.savings_trend.map((v, i) => ({ d: '', v })), { keys: ['v'], h: 120, colors: ['var(--cyan)'] })}
       <div class="tiny dim">Monthly savings contribution — an independent corroborating source.</div>
     </div></div>
   </div>

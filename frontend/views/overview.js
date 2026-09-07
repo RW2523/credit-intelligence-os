@@ -4,7 +4,7 @@ import { openWorkbench } from '/views/applications.js';
 export async function overview(el) {
   const p = await api('/portfolio');
   const k = p.kpis;
-  const riskColors = { Low: '#2ecc8f', Moderate: '#f5a623', Elevated: '#f59e0b', High: '#f2545b' };
+  const riskColors = { Low: 'var(--green)', Moderate: 'var(--amber)', Elevated: 'var(--amber-2)', High: 'var(--red)' };
 
   el.innerHTML = `
   <div class="page-head">
@@ -35,10 +35,9 @@ export async function overview(el) {
         <span class="tag t-blue">Exposure ${money(k.exposure)}</span></div>
       <div class="card-b">${lineChart(p.trend, { keys: ['a', 'ap', 'de'], labels: ['Submitted', 'Approved', 'Declined'], h: 186 })}
         <div class="row wrap small muted" style="margin-top:8px;gap:14px">
-          ${['Submitted #4d7cfe', 'Approved #2ecc8f', 'Declined #f5a623'].map(s => {
-            const [n, c] = s.split(' ');
-            return `<span class="row" style="gap:6px"><i style="width:9px;height:3px;border-radius:3px;background:${c};display:inline-block"></i>${n}</span>`;
-          }).join('')}
+          ${[['Submitted', 'var(--brand)'], ['Approved', 'var(--green)'], ['Declined', 'var(--amber)']]
+            .map(([n, c]) => `<span class="row" style="gap:6px"><i style="width:9px;height:3px;border-radius:3px;background:${c};display:inline-block"></i>${n}</span>`)
+            .join('')}
         </div></div>
     </div>
     <div class="card">
@@ -47,7 +46,7 @@ export async function overview(el) {
         ${donut(Object.entries(p.risk_mix).map(([kk, v]) => ({ k: kk, v })), { colors: riskColors })}
         <div class="col" style="flex:1;gap:7px">
           ${Object.entries(p.risk_mix).map(([kk, v]) => `<div class="row small">
-            <i style="width:8px;height:8px;border-radius:3px;background:${riskColors[kk] || '#4d7cfe'}"></i>
+            <i style="width:8px;height:8px;border-radius:3px;background:${riskColors[kk] || 'var(--brand)'}"></i>
             <span style="flex:1">${kk}</span><b class="num">${v}</b></div>`).join('')}
           <div class="sep"></div>
           <div class="small muted">Ledger ${p.ledger.intact ? '<span class="tag t-green">intact</span>' : '<span class="tag t-red">broken</span>'}

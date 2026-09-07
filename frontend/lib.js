@@ -117,33 +117,35 @@ const P = {
   eye: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
   home: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10',
   user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8',
+  sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
+  moon: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8',
 };
 export const icon = (n, s = 16, cls = '') =>
   `<svg class="ico ${cls}" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${P[n] || P.grid}"/></svg>`;
 
 // --------------------------------------------------------------- charts
-export function lineChart(series, { w = 640, h = 170, keys = [], colors = ['#4d7cfe', '#2ecc8f', '#f5a623'], labels = [], area = true } = {}) {
+export function lineChart(series, { w = 640, h = 170, keys = [], colors = ['var(--brand)', 'var(--green)', 'var(--amber)'], labels = [], area = true } = {}) {
   const pad = { l: 30, r: 8, t: 10, b: 20 };
   const max = Math.max(1, ...series.flatMap(d => keys.map(k => d[k])));
   const X = i => pad.l + i * (w - pad.l - pad.r) / Math.max(1, series.length - 1);
   const Y = v => h - pad.b - (v / max) * (h - pad.t - pad.b);
   let out = `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px;overflow:visible">`;
   for (let g = 0; g <= 4; g++) { const y = pad.t + g * (h - pad.t - pad.b) / 4;
-    out += `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y}" y2="${y}" stroke="#1e2a3d" stroke-dasharray="2 4"/>
-            <text x="${pad.l - 6}" y="${y + 3}" fill="#495a75" font-size="9" text-anchor="end">${Math.round(max - g * max / 4)}</text>`; }
+    out += `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y}" y2="${y}" style="stroke:var(--line-2)" stroke-dasharray="2 4"/>
+            <text x="${pad.l - 6}" y="${y + 3}" style="fill:var(--ink-4)" font-size="9" text-anchor="end">${Math.round(max - g * max / 4)}</text>`; }
   keys.forEach((k, ki) => {
     const pts = series.map((d, i) => `${X(i)},${Y(d[k])}`).join(' ');
-    if (area) out += `<polygon points="${pad.l},${h - pad.b} ${pts} ${X(series.length - 1)},${h - pad.b}" fill="${colors[ki]}" opacity=".08"/>`;
-    out += `<polyline points="${pts}" fill="none" stroke="${colors[ki]}" stroke-width="2" stroke-linejoin="round"/>`;
-    series.forEach((d, i) => { out += `<circle cx="${X(i)}" cy="${Y(d[k])}" r="2.4" fill="${colors[ki]}"><title>${labels[ki] || k}: ${d[k]}</title></circle>`; });
+    if (area) out += `<polygon points="${pad.l},${h - pad.b} ${pts} ${X(series.length - 1)},${h - pad.b}" style="fill:${colors[ki]}" opacity=".08"/>`;
+    out += `<polyline points="${pts}" fill="none" style="stroke:${colors[ki]}" stroke-width="2" stroke-linejoin="round"/>`;
+    series.forEach((d, i) => { out += `<circle cx="${X(i)}" cy="${Y(d[k])}" r="2.4" style="fill:${colors[ki]}"><title>${labels[ki] || k}: ${d[k]}</title></circle>`; });
   });
   series.forEach((d, i) => { if (i % Math.ceil(series.length / 8) === 0)
-    out += `<text x="${X(i)}" y="${h - 5}" fill="#495a75" font-size="9" text-anchor="middle">${d.d || d.month?.slice(5) || i}</text>`; });
+    out += `<text x="${X(i)}" y="${h - 5}" style="fill:var(--ink-4)" font-size="9" text-anchor="middle">${d.d || d.month?.slice(5) || i}</text>`; });
   return out + '</svg>';
 }
 
-export function barChart(data, { w = 620, h = 160, color = '#4d7cfe', threshold = null, thresholdLabel = '' } = {}) {
+export function barChart(data, { w = 620, h = 160, color = 'var(--brand)', threshold = null, thresholdLabel = '' } = {}) {
   const pad = { l: 28, r: 8, t: 12, b: 22 };
   const max = Math.max(1, ...data.map(d => d.v), threshold || 0);
   const bw = (w - pad.l - pad.r) / data.length;
@@ -152,21 +154,21 @@ export function barChart(data, { w = 620, h = 160, color = '#4d7cfe', threshold 
     const bh = (d.v / max) * (h - pad.t - pad.b);
     const x = pad.l + i * bw + bw * .16, y = h - pad.b - bh;
     out += `<rect x="${x}" y="${y}" width="${bw * .68}" height="${Math.max(1, bh)}" rx="3"
-      fill="${d.color || color}" opacity="${d.dim ? .35 : .9}"><title>${d.l}: ${d.v}</title></rect>`;
-    out += `<text x="${x + bw * .34}" y="${h - 7}" fill="#495a75" font-size="9" text-anchor="middle">${d.l}</text>`;
+      style="fill:${d.color || color}" opacity="${d.dim ? .35 : .9}"><title>${d.l}: ${d.v}</title></rect>`;
+    out += `<text x="${x + bw * .34}" y="${h - 7}" style="fill:var(--ink-4)" font-size="9" text-anchor="middle">${d.l}</text>`;
   });
   if (threshold != null) { const y = h - pad.b - (threshold / max) * (h - pad.t - pad.b);
-    out += `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y}" y2="${y}" stroke="#f2545b" stroke-width="1.2" stroke-dasharray="4 3"/>
-            <text x="${w - pad.r}" y="${y - 4}" fill="#f2545b" font-size="9" text-anchor="end">${thresholdLabel}</text>`; }
+    out += `<line x1="${pad.l}" x2="${w - pad.r}" y1="${y}" y2="${y}" style="stroke:var(--red)" stroke-width="1.2" stroke-dasharray="4 3"/>
+            <text x="${w - pad.r}" y="${y - 4}" style="fill:var(--red)" font-size="9" text-anchor="end">${thresholdLabel}</text>`; }
   return out + '</svg>';
 }
 
-export function gauge(value, { size = 132, color = '#4d7cfe', label = '', sub = '' } = {}) {
+export function gauge(value, { size = 132, color = 'var(--brand)', label = '', sub = '' } = {}) {
   const r = size / 2 - 12, c = 2 * Math.PI * r, off = c * (1 - Math.min(1, Math.max(0, value)));
   return `<div class="gauge" style="height:${size}px">
     <svg width="${size}" height="${size}" style="transform:rotate(-90deg)">
-      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#1b2436" stroke-width="9"/>
-      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="9"
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:var(--track)" stroke-width="9"/>
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:${color}" stroke-width="9"
         stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"
         style="transition:stroke-dashoffset .8s cubic-bezier(.4,0,.2,1)"/></svg>
     <div class="lbl"><b>${label}</b><span>${sub}</span></div></div>`;
@@ -178,18 +180,18 @@ export function donut(entries, { size = 128, colors = {} } = {}) {
   let out = `<svg width="${size}" height="${size}" style="transform:rotate(-90deg)">`;
   entries.forEach(e => {
     const frac = e.v / total;
-    out += `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${colors[e.k] || e.color || '#4d7cfe'}"
+    out += `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" style="stroke:${colors[e.k] || e.color || 'var(--brand)'}"
       stroke-width="11" stroke-dasharray="${frac * c} ${c}" stroke-dashoffset="${-acc * c}"><title>${e.k}: ${e.v}</title></circle>`;
     acc += frac;
   });
   return out + '</svg>';
 }
 
-export function spark(values, { w = 90, h = 30, color = '#4d7cfe' } = {}) {
+export function spark(values, { w = 90, h = 30, color = 'var(--brand)' } = {}) {
   if (!values.length) return '';
   const max = Math.max(...values), min = Math.min(...values), rng = max - min || 1;
   const pts = values.map((v, i) => `${i * w / (values.length - 1)},${h - ((v - min) / rng) * (h - 4) - 2}`).join(' ');
-  return `<svg class="spark" width="${w}" height="${h}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6"/></svg>`;
+  return `<svg class="spark" width="${w}" height="${h}"><polyline points="${pts}" fill="none" style="stroke:${color}" stroke-width="1.6"/></svg>`;
 }
 
 export function stepChart(series, { w = 620, h = 150, threshold = null } = {}) {
@@ -198,15 +200,15 @@ export function stepChart(series, { w = 620, h = 150, threshold = null } = {}) {
   const X = i => pad.l + i * (w - pad.l - pad.r) / Math.max(1, series.length - 1);
   const Y = v => h - pad.b - (v / max) * (h - pad.t - pad.b);
   let out = `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px;overflow:visible">`;
-  out += `<line x1="${pad.l}" x2="${w - pad.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="#2ecc8f" stroke-dasharray="3 3" opacity=".5"/>`;
-  if (threshold != null && threshold > 0) out += `<line x1="${pad.l}" x2="${w - pad.r}" y1="${Y(threshold)}" y2="${Y(threshold)}" stroke="#f5a623" stroke-dasharray="4 3" opacity=".7"/>`;
+  out += `<line x1="${pad.l}" x2="${w - pad.r}" y1="${Y(0)}" y2="${Y(0)}" style="stroke:var(--green)" stroke-dasharray="3 3" opacity=".5"/>`;
+  if (threshold != null && threshold > 0) out += `<line x1="${pad.l}" x2="${w - pad.r}" y1="${Y(threshold)}" y2="${Y(threshold)}" style="stroke:var(--amber)" stroke-dasharray="4 3" opacity=".7"/>`;
   const pts = series.map((d, i) => `${X(i)},${Y(d.days_late)}`).join(' ');
-  out += `<polygon points="${pad.l},${Y(0)} ${pts} ${X(series.length - 1)},${Y(0)}" fill="#f5a623" opacity=".1"/>`;
-  out += `<polyline points="${pts}" fill="none" stroke="#f5a623" stroke-width="2"/>`;
+  out += `<polygon points="${pad.l},${Y(0)} ${pts} ${X(series.length - 1)},${Y(0)}" style="fill:var(--amber)" opacity=".1"/>`;
+  out += `<polyline points="${pts}" fill="none" style="stroke:var(--amber)" stroke-width="2"/>`;
   series.forEach((d, i) => {
-    const col = d.days_late === 0 ? '#2ecc8f' : d.days_late <= 5 ? '#f5a623' : '#f2545b';
-    out += `<circle cx="${X(i)}" cy="${Y(d.days_late)}" r="3" fill="${col}"><title>${d.month}: ${d.days_late} days late</title></circle>`;
-    if (i % 3 === 0) out += `<text x="${X(i)}" y="${h - 6}" fill="#495a75" font-size="8.5" text-anchor="middle">${d.month.slice(2, 7)}</text>`;
+    const col = d.days_late === 0 ? 'var(--green)' : d.days_late <= 5 ? 'var(--amber)' : 'var(--red)';
+    out += `<circle cx="${X(i)}" cy="${Y(d.days_late)}" r="3" style="fill:${col}"><title>${d.month}: ${d.days_late} days late</title></circle>`;
+    if (i % 3 === 0) out += `<text x="${X(i)}" y="${h - 6}" style="fill:var(--ink-4)" font-size="8.5" text-anchor="middle">${d.month.slice(2, 7)}</text>`;
   });
   return out + '</svg>';
 }

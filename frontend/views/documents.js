@@ -57,7 +57,7 @@ function renderViewer(host) {
         <div class="doc-stage" id="stage">
           ${isImg ? `<img src="${url}" alt="${esc(d.label)}"/>`
             : isCsv ? `<pre class="mono" id="csv" style="width:100%;height:520px;overflow:auto;padding:14px;
-                        color:var(--ink-2);background:#0b111c;text-align:left"></pre>`
+                        color:var(--ink-2);background:var(--well);text-align:left"></pre>`
             : `<iframe src="${url}#toolbar=0&view=FitH" title="${esc(d.label)}"></iframe>`}
           <div class="bbox" id="bbox" style="display:none"></div>
         </div>

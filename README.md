@@ -39,6 +39,7 @@ quick tunnel that publishes the app). All three are user services — enable lin
 ```bash
 ops/status.sh    # service states + the current public URL
 ops/url.sh       # just the public URL
+ops/smoke.sh     # end-to-end check (pass a base URL to test a different host)
 ```
 
 A `trycloudflare.com` quick tunnel hostname is **ephemeral** — Cloudflare mints a new one every
@@ -108,6 +109,13 @@ soften one. This is visible in the UI: every rewritten claim is labelled, and th
 draft is one click away.
 
 ---
+
+## Light and dark
+
+The sun/moon control in the top bar switches theme. A first visit follows the operating system's
+preference; the choice is then remembered per browser and applied before first paint, so a reload
+never flashes the wrong theme. Both themes are driven by one token set — no component carries a
+raw colour — which is why charts, gauges and SVG follow the switch too.
 
 ## Roles
 

@@ -41,6 +41,21 @@ window.addEventListener('hashchange', () => {
 });
 window.go = go;
 
+// ---------------------------------------------------------------- theme
+// Persisted per browser; falls back to the OS preference on first visit. Applied to <html>
+// before first paint by an inline script in index.html so there is no flash of the wrong theme.
+export const theme = () => document.documentElement.dataset.theme || 'dark';
+
+export function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('cios-theme', t); } catch (e) { /* private mode */ }
+}
+
+function toggleTheme() {
+  applyTheme(theme() === 'light' ? 'dark' : 'light');
+  render();
+}
+
 // ---------------------------------------------------------------- shell
 function shell() {
   const u = state.boot.roles[state.role];
@@ -83,6 +98,8 @@ function shell() {
         <span class="tag t-${state.boot.llm.available ? 'green' : 'amber'}" title="Local model">
           ${icon('cpu', 12)} ${state.boot.llm.available ? esc(state.boot.llm.model) : 'deterministic mode'}</span>
         <span class="tag t-${state.boot.autonomy.kill_switch ? 'red' : 'purple'}">${icon('power', 12)} ${state.boot.autonomy.kill_switch ? 'STOPPED' : esc(state.boot.autonomy.mode)}</span>
+        <button class="btn-icon" id="theme" title="Switch to ${theme() === 'light' ? 'dark' : 'light'} mode"
+          aria-label="Switch to ${theme() === 'light' ? 'dark' : 'light'} mode">${icon(theme() === 'light' ? 'moon' : 'sun')}</button>
         <button class="btn-icon" id="bell">${icon('bell')}${state.notifications.length ? '<i class="dot-badge"></i>' : ''}</button>
         <button class="btn-icon" id="refresh" title="Refresh">${icon('refresh')}</button>
       </div>
@@ -123,6 +140,7 @@ function bindShell() {
     toast('Role switched', state.boot.roles[state.role].name);
     go(allowed.includes(state.view) ? state.view : allowed[0]);
   };
+  $('#theme').onclick = toggleTheme;
   $('#refresh').onclick = async () => { await refreshMeta(); render(); toast('Refreshed'); };
   $('#bell').onclick = showNotifications;
   bindSearch();

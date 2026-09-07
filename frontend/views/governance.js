@@ -58,9 +58,9 @@ function simResult(s) {
     <span class="sub">replayed against ${b.approve + b.decline + b.request} frozen snapshots</span></div>
     <div class="card-b">
       ${barChart([
-        { l: 'Approve', v: c.approve, color: '#2ecc8f' }, { l: 'Approve (base)', v: b.approve, color: '#2ecc8f', dim: true },
-        { l: 'Request', v: c.request, color: '#4d7cfe' }, { l: 'Request (base)', v: b.request, color: '#4d7cfe', dim: true },
-        { l: 'Decline', v: c.decline, color: '#f2545b' }, { l: 'Decline (base)', v: b.decline, color: '#f2545b', dim: true },
+        { l: 'Approve', v: c.approve, color: 'var(--green)' }, { l: 'Approve (base)', v: b.approve, color: 'var(--green)', dim: true },
+        { l: 'Request', v: c.request, color: 'var(--brand)' }, { l: 'Request (base)', v: b.request, color: 'var(--brand)', dim: true },
+        { l: 'Decline', v: c.decline, color: 'var(--red)' }, { l: 'Decline (base)', v: b.decline, color: 'var(--red)', dim: true },
       ], { h: 150 })}
       <div class="row wrap small muted" style="gap:18px;margin-top:8px">
         <span>Exposure <b style="color:var(--ink)">${money(c.exposure)}</b> <span class="dim">(was ${money(b.exposure)})</span></span>
@@ -133,7 +133,7 @@ function renderAutonomy(host, a) {
       </dl>
       <div class="tiny dim">${esc(a.approved_by)} · last changed ${dtime(a.changed_at)}</div>
       <div class="sep"></div>
-      <div class="row" style="gap:10px;padding:10px;border:1px solid ${a.kill_switch ? '#f2545b55' : 'var(--line)'};
+      <div class="row" style="gap:10px;padding:10px;border:1px solid ${a.kill_switch ? 'var(--red-line)' : 'var(--line)'};
         border-radius:10px;background:${a.kill_switch ? 'var(--red-dim)' : 'transparent'}">
         ${icon('power', 18)}
         <div style="flex:1"><b style="font-size:12.5px">Stop autonomous actions</b>
