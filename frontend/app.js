@@ -48,7 +48,7 @@ function shell() {
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-mark">CI</div>
-      <div class="brand-txt"><b>Credit Intelligence</b><span>Operating System</span></div>
+      <div class="brand-txt"><b>KT Credit Intelligence</b><span>Operating System</span></div>
     </div>
     <nav class="nav">
       ${NAV.map(g => `<div class="nav-group">${g.g}</div>` + g.items.map(i => `
