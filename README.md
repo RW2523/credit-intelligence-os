@@ -2,7 +2,7 @@
 
 A working, local-first credit intelligence platform for a cooperative — origination, decision
 intelligence, an AI Credit Council, member intelligence, early warning, collections, copilots,
-governance and an auditable decision ledger, running as **one system** on your Mac.
+governance and an auditable decision ledger, running as **one system** on your own machine.
 
 Everything runs on this machine. No cloud calls, no API keys. The reasoning agents use a **small
 local model** through Ollama; every number they talk about comes from deterministic engines, never
@@ -21,6 +21,31 @@ That is all. The script creates a Python environment, installs dependencies, pul
 
 To start again from a clean slate: `CIOS_RESET=1 ./run.sh`
 To use a different local model: `CIOS_MODEL=qwen2.5:3b ./run.sh`
+
+Runs on macOS and on Linux (including NVIDIA DGX Spark / GB10, arm64). `run.sh` picks an
+interpreter with prebuilt wheels for the platform, starts Ollama via systemd where it is managed
+that way, and opens the browser with `xdg-open` or `open` as available. Set `CIOS_OPEN=0` to skip
+the browser, `HOST=0.0.0.0` to listen beyond loopback.
+
+The configured model is matched against what Ollama actually serves: a host holding
+`llama3.2:latest` satisfies the default `llama3.2:3b` and the resolved tag is what gets called.
+
+### Always-on deployment (Linux / DGX Spark)
+
+`ops/` holds a systemd-based deployment: `ollama`, `cios` (the API) and `cios-tunnel` (a Cloudflare
+quick tunnel that publishes the app). All three are user services — enable lingering
+(`loginctl enable-linger $USER`) so they start at boot and survive logout.
+
+```bash
+ops/status.sh    # service states + the current public URL
+ops/url.sh       # just the public URL
+```
+
+A `trycloudflare.com` quick tunnel hostname is **ephemeral** — Cloudflare mints a new one every
+time `cloudflared` starts, so restarting `cios-tunnel` changes the URL (restarting `cios` does
+not). `ops/tunnel.sh` writes the current hostname to `~/.local/state/cios/public_url` and appends
+to `url_history`. For a URL that never changes, run a *named* tunnel instead — that needs a
+Cloudflare account and domain (`cloudflared tunnel login`).
 
 **The platform works without a model too.** If Ollama isn't running, every agent falls back to its
 deterministic position and the UI marks those positions `rule-based`. Nothing breaks.
@@ -102,6 +127,7 @@ backend/
   seed.py            synthetic members, applications, documents, policies
   engines/           policy.py  risk.py  fraud.py  lmi.py  docs.py
 frontend/            no build step — ES modules, hand-written CSS
+ops/                 always-on deployment: tunnel + status/url helpers
 demo_files/          synthetic PDFs / PNG / CSVs used as real evidence
 data/cios.db         created on first run
 ```

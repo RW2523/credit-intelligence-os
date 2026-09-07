@@ -9,13 +9,29 @@ FAST_MODEL = os.environ.get("CIOS_FAST_MODEL", MODEL)
 _state = {"available": None, "model": MODEL, "models": []}
 
 
+def _resolve(want: str, tags: list[str]) -> str | None:
+    """Pick the served tag for `want`: exact first, then any tag sharing its base name."""
+    if want in tags:
+        return want
+    base = want.split(":")[0]
+    for t in tags:
+        if t.split(":")[0] == base:
+            return t
+    return None
+
+
 async def probe() -> dict:
     try:
         async with httpx.AsyncClient(timeout=4) as c:
             r = await c.get(f"{OLLAMA}/api/tags")
             tags = [m["name"] for m in r.json().get("models", [])]
         _state["models"] = tags
-        _state["available"] = any(t.split(":")[0] == MODEL.split(":")[0] for t in tags)
+        # Resolve the configured model to a tag Ollama actually serves. Matching only on
+        # the base name and then keeping the configured string (e.g. "llama3.2:3b" when the
+        # host holds "llama3.2:latest") makes every generate call 404 while probe reports
+        # available — the agents would silently fall back to deterministic text.
+        _state["model"] = _resolve(MODEL, tags)
+        _state["available"] = _state["model"] is not None
         if not _state["available"] and tags:
             _state["model"] = tags[0]
             _state["available"] = True
@@ -26,7 +42,7 @@ async def probe() -> dict:
 
 
 def status() -> dict:
-    return dict(_state, host=OLLAMA)
+    return dict(_state, host=OLLAMA, configured=MODEL)
 
 
 async def generate(system: str, prompt: str, *, json_mode=True, temperature=0.2,
