@@ -1,0 +1,5 @@
+month,employer,member_id,salary_deduction,received_date,status
+2024-01,TechCorp Inc.,104328,620.00,2024-01-08,ON_TIME
+2024-02,TechCorp Inc.,104328,620.00,2024-02-08,ON_TIME
+2024-03,TechCorp Inc.,104328,620.00,2024-03-11,LATE_3_DAYS
+2024-04,TechCorp Inc.,104328,620.00,2024-04-16,LATE_8_DAYS

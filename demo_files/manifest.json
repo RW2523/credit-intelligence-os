@@ -1,0 +1,52 @@
+{
+  "files": [
+    {
+      "name": "payslip_david_carter_mar_2024.pdf",
+      "type": "Payslip",
+      "status": "Verified",
+      "confidence": 98
+    },
+    {
+      "name": "bank_statement_david_carter_q1_2024.pdf",
+      "type": "Bank Statement",
+      "status": "Verified",
+      "confidence": 96
+    },
+    {
+      "name": "employment_letter_david_carter.pdf",
+      "type": "Employment Letter",
+      "status": "Verified",
+      "confidence": 97
+    },
+    {
+      "name": "national_id_david_carter.png",
+      "type": "Government ID",
+      "status": "Verified",
+      "confidence": 99
+    },
+    {
+      "name": "salary_deduction_david_carter.csv",
+      "type": "Salary Deduction",
+      "status": "Verified",
+      "confidence": 100
+    },
+    {
+      "name": "member_payment_history_david_carter.csv",
+      "type": "Payment History",
+      "status": "Verified",
+      "confidence": 100
+    },
+    {
+      "name": "business_permit_maria_torres.pdf",
+      "type": "Business Permit",
+      "status": "Verified",
+      "confidence": 97
+    },
+    {
+      "name": "income_statement_maria_torres_q1.pdf",
+      "type": "Income Statement",
+      "status": "Needs Review",
+      "confidence": 92
+    }
+  ]
+}
