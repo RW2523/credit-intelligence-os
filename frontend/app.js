@@ -1,4 +1,4 @@
-import { $, h, api, icon, esc, toast, closeDrawer } from '/lib.js';
+import { $, api, icon, esc, toast, closeDrawer } from '/lib.js';
 import * as views from '/views/index.js';
 
 export const state = {
@@ -28,8 +28,40 @@ const NAV = [
   ]},
 ];
 
+// ------------------------------------------------------------ permissions
+// Each role carries the list of surfaces it may use. Two ids in that list are not routes:
+// "assistant" is how the backend names the Member Assistant surface, whose route id is
+// "member-portal"; "workbench" is the case detail behind Applications rather than a nav entry.
+const ROLE_ALIAS = { assistant: 'member-portal' };
+const DETAIL_OF = { workbench: 'applications' };
+
+function allowedViews() {
+  const raw = state.boot?.roles?.[state.role]?.views || [];
+  return new Set(raw.map(v => ROLE_ALIAS[v] || v));
+}
+
+// A detail route is open whenever its parent surface is, so a role that can see Applications
+// can still open a case even if "workbench" was never spelled out in its list.
+export function canSee(view) {
+  const a = allowedViews();
+  return a.has(view) || (DETAIL_OF[view] ? a.has(DETAIL_OF[view]) : false);
+}
+
+// First nav entry this role may actually use — where it lands, and where a blocked route goes.
+function landingView() {
+  const a = allowedViews();
+  return NAV.flatMap(g => g.items).find(i => a.has(i.id))?.id
+      || [...a].find(v => !DETAIL_OF[v])
+      || 'overview';
+}
+
 // -------------------------------------------------------------- routing
 export function go(view, param = null) {
+  if (state.boot && !canSee(view)) {
+    const to = landingView();
+    toast('Not available for this role', `${state.boot.roles[state.role].role} cannot open ${navName(view)}`, 'warn');
+    view = to; param = null;
+  }
   state.view = view; state.param = param;
   closeDrawer();
   location.hash = param ? `#${view}/${param}` : `#${view}`;
@@ -37,7 +69,11 @@ export function go(view, param = null) {
 }
 window.addEventListener('hashchange', () => {
   const [v, p] = location.hash.slice(1).split('/');
-  if (v && (v !== state.view || (p || null) !== state.param)) { state.view = v; state.param = p || null; render(); }
+  if (!v) return;
+  if (v !== state.view || (p || null) !== state.param) {
+    if (state.boot && !canSee(v)) return go(landingView());   // typed/pasted url cannot bypass the role
+    state.view = v; state.param = p || null; render();
+  }
 });
 window.go = go;
 
@@ -66,11 +102,15 @@ function shell() {
       <div class="brand-txt"><b>KT Credit Intelligence</b><span>Operating System</span></div>
     </div>
     <nav class="nav">
-      ${NAV.map(g => `<div class="nav-group">${g.g}</div>` + g.items.map(i => `
+      ${NAV.map(g => {
+        const items = g.items.filter(i => canSee(i.id));          // only what this role may open
+        if (!items.length) return '';                              // drop a group that empties out
+        return `<div class="nav-group">${g.g}</div>` + items.map(i => `
         <button class="nav-item ${state.view === i.id ? 'on' : ''}" data-go="${i.id}">
           ${icon(i.icon)} <span>${i.name}</span>
           ${state.badge[i.badge] ? `<span class="pill ${i.badge === 'ew' ? 'hot' : ''}">${state.badge[i.badge]}</span>` : ''}
-        </button>`).join('')).join('')}
+        </button>`).join('');
+      }).join('')}
     </nav>
     <div class="sidebar-foot">
       <div class="row" style="gap:9px">
@@ -115,7 +155,13 @@ export async function render() {
   const app = $('#app');
   if (!app.querySelector('.sidebar')) app.innerHTML = shell();
   else {
-    app.querySelector('.sidebar').outerHTML = h(shell()).outerHTML;
+    // Re-render every piece of chrome that reads state: the sidebar, the breadcrumb and the
+    // top-actions badges. Leaving .top-actions alone left the autonomy/kill-switch badge and
+    // the theme icon showing the previous value until a full page reload.
+    const t = document.createElement('template');
+    t.innerHTML = shell().trim();
+    app.querySelector('.sidebar').replaceWith(t.content.querySelector('.sidebar'));
+    app.querySelector('.top-actions').replaceWith(t.content.querySelector('.top-actions'));
     $('.crumbs').innerHTML = `${icon('layers', 14)}<b>${navName(state.view)}</b>${state.param ? `<span>/</span><span class="mono">${esc(state.param)}</span>` : ''}`;
   }
   bindShell();
@@ -136,9 +182,9 @@ function bindShell() {
   const sel = $('#roleSel');
   if (sel) sel.onchange = e => {
     state.role = e.target.value;
-    const allowed = state.boot.roles[state.role].views;
     toast('Role switched', state.boot.roles[state.role].name);
-    go(allowed.includes(state.view) ? state.view : allowed[0]);
+    // stay put if the new role can also see this surface, otherwise land on its first one
+    go(canSee(state.view) ? state.view : landingView());
   };
   $('#theme').onclick = toggleTheme;
   $('#refresh').onclick = async () => { await refreshMeta(); render(); toast('Refreshed'); };
