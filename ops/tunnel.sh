@@ -34,4 +34,13 @@ done
 WATCHER=$!
 trap 'kill $WATCHER 2>/dev/null' EXIT
 
-exec "${CLOUDFLARED:-/home/echomind/bin/cloudflared}" tunnel --no-autoupdate --url "http://127.0.0.1:$PORT" >>"$LOG" 2>&1
+# A systemd user unit gets a minimal PATH, so resolve the binary rather than relying on it.
+CF="${CLOUDFLARED:-}"
+if [ -z "$CF" ]; then
+  for c in cloudflared "$HOME/bin/cloudflared" /usr/local/bin/cloudflared /usr/bin/cloudflared /opt/homebrew/bin/cloudflared; do
+    if command -v "$c" >/dev/null 2>&1; then CF="$(command -v "$c")"; break; fi
+  done
+fi
+[ -n "$CF" ] || { echo "cloudflared not found — set CLOUDFLARED=/path/to/cloudflared" >>"$LOG"; exit 1; }
+
+exec "$CF" tunnel --no-autoupdate --url "http://127.0.0.1:$PORT" >>"$LOG" 2>&1
