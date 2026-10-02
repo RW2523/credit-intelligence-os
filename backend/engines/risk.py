@@ -11,12 +11,12 @@ from sklearn.preprocessing import StandardScaler
 FEATURES = [
     ("dsr", "Debt service ratio"),
     ("reliability", "Historical payment reliability"),
-    ("tenure_years", "Employment tenure"),
+    ("tenure_years", "Service / business tenure"),
     ("membership_years", "Membership tenure"),
     ("equity_ratio", "Savings & share capital vs exposure"),
     ("income_variance", "Declared vs verified income variance"),
     ("recent_inquiries", "Recent credit inquiries"),
-    ("prior_loans", "Successfully repaid facilities"),
+    ("prior_financings", "Successfully repaid financings"),
     ("max_days_late", "Worst historical delinquency"),
     ("utilisation", "Facility utilisation"),
 ]
@@ -39,7 +39,7 @@ class RiskModel:
             rng.gamma(2, 0.5, n).clip(0.02, 6),          # equity ratio
             rng.gamma(1.4, 4, n).clip(0, 45),            # income variance %
             rng.poisson(1.3, n).clip(0, 9),              # inquiries
-            rng.poisson(2.2, n).clip(0, 10),             # prior loans
+            rng.poisson(2.2, n).clip(0, 10),             # prior financings
             rng.gamma(1.1, 7, n).clip(0, 120),           # max days late
             rng.normal(48, 20, n).clip(0, 100),          # utilisation
         ])
@@ -62,12 +62,12 @@ class RiskModel:
         return {
             "dsr": policy["dsr"],
             "reliability": member["reliability"] or 75,
-            "tenure_years": member["tenure_years"],
+            "tenure_years": member["tenure_years"] or 8,
             "membership_years": policy["tenure_months"] / 12,
             "equity_ratio": equity / exposure,
             "income_variance": policy["income"]["variance_pct"],
             "recent_inquiries": history.get("recent_inquiries", 1),
-            "prior_loans": member["prior_loans"],
+            "prior_financings": member["prior_financings"],
             "max_days_late": history.get("max_days_late", 0),
             "utilisation": history.get("utilisation", 45),
         }
@@ -122,13 +122,13 @@ class RiskModel:
         return {
             "dsr": "R01 — Debt service ratio elevated relative to verified income",
             "reliability": "R02 — Payment reliability below product benchmark",
-            "tenure_years": "R03 — Limited employment tenure",
+            "tenure_years": "R03 — Limited service or business tenure",
             "membership_years": "R04 — Short membership relationship",
-            "equity_ratio": "R05 — Low savings and share capital relative to exposure",
+            "equity_ratio": "R05 — Low savings (Simpanan) and share capital relative to exposure",
             "income_variance": "R06 — Declared income not fully corroborated",
-            "recent_inquiries": "R07 — Recent credit-seeking activity",
-            "prior_loans": "R08 — Limited repayment track record",
-            "max_days_late": "R09 — Historical delinquency present",
+            "recent_inquiries": "R07 — Recent credit inquiries on CCRIS",
+            "prior_financings": "R08 — Limited financing repayment track record",
+            "max_days_late": "R09 — Missed or late salary deductions on record",
             "utilisation": "R10 — High facility utilisation",
         }[d["feature"]]
 

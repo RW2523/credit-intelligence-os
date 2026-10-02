@@ -3,21 +3,24 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>KT Credit Intelligence OS</title>
+<title>KT Credit Intelligence · Koperasi Tentera</title>
+<meta name="description" content="Credit intelligence for Koperasi Angkatan Tentera Malaysia Berhad — synthetic demonstration."/>
 <meta name="color-scheme" content="dark light"/>
+<meta name="theme-color" content="#0c2f22"/>
 <script>
-  // Set the theme before the stylesheet paints, so a reload in light mode never flashes dark.
+  // Set theme and language before the stylesheet paints, so a reload never flashes the wrong look.
   (function () {
-    var t;
-    try { t = localStorage.getItem('cios-theme'); } catch (e) { /* private mode */ }
+    var t, l;
+    try { t = localStorage.getItem('cios-theme'); l = localStorage.getItem('kt-lang'); } catch (e) { /* private mode */ }
     if (t !== 'light' && t !== 'dark') {
       t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     }
     document.documentElement.dataset.theme = t;
+    if (l === 'ms') document.documentElement.lang = 'ms';
   })();
 </script>
 <link rel="stylesheet" href="/styles.css"/>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234d7cfe'/%3E%3Ctext x='16' y='22' font-size='16' font-family='sans-serif' font-weight='bold' fill='white' text-anchor='middle'%3ECI%3C/text%3E%3C/svg%3E"/>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 2 35 7v12c0 9.5-6.6 16.3-15 19-8.4-2.7-15-9.5-15-19V7z' fill='%231f6b4a' stroke='%23d6b04a' stroke-width='2'/%3E%3Ctext x='20' y='27' text-anchor='middle' font-family='sans-serif' font-size='13' font-weight='800' fill='white'%3EKT%3C/text%3E%3C/svg%3E"/>
 </head>
 <body>
 <div id="app"><div class="center"><div class="spin"></div></div></div>

@@ -3,14 +3,19 @@ detection (CUSUM), forecasting, member state machine, corroboration and
 suppression rules, and recovery detection."""
 from __future__ import annotations
 import math, datetime as dt
+from clock import TODAY, add_months
+import fmt
+from seed import cycle_dates
 
 STATES = ["STABLE", "WATCH", "ELEVATED", "AT_RISK", "RECOVERY"]
 
 SUPPRESSIONS = {
-    "104291": dict(reason="Approved payment arrangement in force until Jun 2024", policy="POL-007"),
+    "104291": dict(reason=f"Approved rescheduling arrangement in force until {fmt.month(add_months(TODAY, 3, 1))}",
+                   policy="POL-007"),
 }
 KNOWN_EVENTS = [
-    dict(date="2024-03-05", scope="all", label="Regional bank processing outage (2 days)", suppress=False),
+    dict(date=cycle_dates(2)[0].isoformat(), scope="all",
+         label="Biro ANGKASA remittance processing delay (2 days)", suppress=False),
 ]
 
 
@@ -38,7 +43,7 @@ def cusum(payments: list[dict], k: float = 0.5) -> dict:
     change_month = payments[idx]["month"] if (detected and idx is not None) else None
     days_ago = None
     if change_month:
-        days_ago = (dt.date(2024, 4, 16) - dt.date.fromisoformat(change_month)).days
+        days_ago = (TODAY - dt.date.fromisoformat(change_month)).days
     return {"detected": detected, "statistic": round(peak, 2), "series": series,
             "change_month": change_month, "days_ago": days_ago, "baseline": b}
 
@@ -58,7 +63,7 @@ def forecast(payments: list[dict], cp: dict, member: dict) -> dict:
     p30 = 1 / (1 + math.exp(-logit))
     p90 = 1 / (1 + math.exp(-(logit + 0.55)))
     recovery = max(0.05, min(0.95, 0.35 + 0.005 * (member.get("reliability") or 80)
-                             + 0.03 * member.get("prior_loans", 0) - 0.004 * latest))
+                             + 0.03 * member.get("prior_financings", 0) - 0.004 * latest))
     return {"p_late_30d": round(p30, 3), "p_late_90d": round(p90, 3),
             "recovery_likelihood": round(recovery, 3),
             "savings_drop_pct": round(savings_drop, 1), "trend_days_per_cycle": round(trend, 2)}
@@ -72,7 +77,7 @@ def corroborate(member: dict, cp: dict, fc: dict) -> dict:
                                detail=f"{fc['savings_drop_pct']}% below the member's 6-month baseline", weight=0.30))
     ded = member.get("deduction", 0)
     if ded and cp["detected"] and member.get("state") in ("ELEVATED", "AT_RISK"):
-        supporting.append(dict(source="Salary deduction feed",
+        supporting.append(dict(source="ANGKASA deduction feed",
                                detail="2 delayed remittances in the last 2 cycles", weight=0.35))
     if cp["detected"]:
         supporting.append(dict(source="Repayment timing",
@@ -121,7 +126,9 @@ def member_state(cp: dict, fc: dict, corr: dict, payments: list[dict]) -> dict:
             "recovery_progress": sum(1 for d in last3 if d <= 2), "recovery_target": 3}
 
 
-def why_now(cp: dict, fc: dict, corr: dict, state: dict) -> str:
+def why_now(cp: dict, fc: dict, corr: dict, state: dict, payments: list | None = None) -> str:
+    if payments == []:
+        return "No KT financing repayments to monitor — savings and engagement are tracked instead."
     if state["state"] == "STABLE":
         return "Behaviour remains within this member's own historical baseline."
     if state["state"] == "RECOVERY":
@@ -171,7 +178,7 @@ def analyse(member: dict) -> dict:
     return {
         "member_id": member["id"], "name": member["name"],
         "baseline": cp["baseline"], "change_point": cp, "forecast": fc,
-        "corroboration": corr, "state": st, "why_now": why_now(cp, fc, corr, st),
+        "corroboration": corr, "state": st, "why_now": why_now(cp, fc, corr, st, payments),
         "intervention": intervention(st, fc, member),
         "series": [{"month": p["month"], "days_late": p["days_late"]} for p in payments],
         "savings_trend": member.get("savings_trend", []),

@@ -1,12 +1,16 @@
-# Credit Intelligence OS
+# KT Credit Intelligence
 
-A working, local-first credit intelligence platform for a cooperative — origination, decision
-intelligence, an AI Credit Council, member intelligence, early warning, collections, copilots,
-governance and an auditable decision ledger, running as **one system** on your own machine.
+A credit-intelligence platform for **Koperasi Angkatan Tentera Malaysia Berhad (Koperasi Tentera, KT)** —
+Islamic financing origination, member servicing, early warning, collections, financial-distress and
+cross-selling analytics, governance and an auditable decision ledger — running as one system on this
+machine. Members are Armed Forces personnel, MINDEF civil servants and veterans; amounts are in Ringgit;
+every timestamp is Malaysia time (UTC+8).
 
-Everything runs on this machine. No cloud calls, no API keys. The reasoning agents use a **small
-local model** through Ollama; every number they talk about comes from deterministic engines, never
-from the model.
+All members, figures and documents are **synthetic**. Product names and branch locations follow KT's
+public information; terms (profit rates, limits) are placeholders until KT confirms them.
+
+The change list this build answers is in [`docs/KT-CHANGE-PLAN.md`](docs/KT-CHANGE-PLAN.md) (with the
+original request in `docs/requests/`).
 
 ---
 
@@ -16,132 +20,97 @@ from the model.
 ./run.sh
 ```
 
-That is all. The script creates a Python environment, installs dependencies, pulls the small model
-(`llama3.2:3b`, ~2 GB, once), starts the server and opens <http://127.0.0.1:8899>.
+Creates the Python environment, makes sure the local model is available, generates the demo evidence and
+serves <http://127.0.0.1:8899>.
 
-To start again from a clean slate: `CIOS_RESET=1 ./run.sh`
-To use a different local model: `CIOS_MODEL=qwen2.5:3b ./run.sh`
+| Setting | Effect |
+|---|---|
+| `CIOS_RESET=1 ./run.sh` | start from a clean database (re-anchors the demo to today) |
+| `CIOS_TODAY=2026-10-15` | freeze "today" to the demo day; every seeded date and new event moves with it |
+| `CIOS_MODEL` | main model for every assistant and the Council (default `qwen3:30b`) |
+| `CIOS_FAST_MODEL` | fallback model (default `llama3.2:3b`) |
+| `CIOS_COUNCIL_MODEL` | optional separate model for the six Council calls |
+| `CIOS_DEMO=0` | hide the demo accounts on the sign-in page |
+| `CIOS_DEMO_PASSWORD`, `CIOS_MEMBER_PIN` | demo credentials (default `KT-demo-2026` / `123456`) |
+| `CIOS_SECRET` | fixed session-signing key (otherwise one is generated and stored) |
 
-Runs on macOS and on Linux (including NVIDIA DGX Spark / GB10, arm64). `run.sh` picks an
-interpreter with prebuilt wheels for the platform, starts Ollama via systemd where it is managed
-that way, and opens the browser with `xdg-open` or `open` as available. Set `CIOS_OPEN=0` to skip
-the browser, `HOST=0.0.0.0` to listen beyond loopback.
+The platform works without a model: every assistant falls back to deterministic, grounded answers and
+the UI says so.
 
-The configured model is matched against what Ollama actually serves: a host holding
-`llama3.2:latest` satisfies the default `llama3.2:3b` and the resolved tag is what gets called.
+## Sign in
 
-### Always-on deployment (Linux / DGX Spark)
+Staff sign in with a staff ID; members sign in with their KT member number and PIN. With `CIOS_DEMO=1`
+the sign-in page lists one-click demo accounts.
 
-`ops/` holds a systemd-based deployment: `ollama`, `cios` (the API) and `cios-tunnel` (a Cloudflare
-quick tunnel that publishes the app). All three are user services — enable lingering
-(`loginctl enable-linger $USER`) so they start at boot and survive logout.
+| ID | Role | Sees |
+|---|---|---|
+| `noraini` | Credit Officer (up to RM30,000) | overview, applications, intake, documents, Member 360, KT Assistant |
+| `aisha` | Senior Credit Officer (up to RM100,000) | + early warning, cross-selling, **possible-bankruptcy outlook** |
+| `azlan` | Collections Officer | early warning, collections, Member 360 (+ distress outlook) |
+| `priya` | Risk Manager | governance, policy sandbox, early warning (+ distress outlook) |
+| `siewling` | Compliance Officer | decision ledger, governance (+ distress outlook) |
+| `kamarul` | Branch Manager (Credit Committee, up to RM250,000) | cockpit and everything operational |
+| `zulkifli`, `rohana` | Board | cockpit (aggregates only), sandbox, governance, ledger, Autonomy Dial |
+| `farah` | Marketing & Member Growth | cross-selling (never distress bands), Member 360 |
+| `104328`, `104310`, `104415` … | Member | own account, Check Before You Borrow, Member Assistant |
+
+Roles are enforced on the server for every API call, not just hidden in the menu.
+
+## A ten-minute KT demo
+
+1. **Member (104328, Sjn Ahmad Faizal)** — the portal opens in Bahasa Malaysia: balance RM18,250, next
+   deduction RM650 on the 25th via Biro ANGKASA. Ask *"Berapa baki pinjaman saya dan bila bayaran
+   seterusnya?"* — the answer is in Malaysian Malay, with the balance (never the RM25,000 application).
+   Open **Semak Sebelum Memohon** — the indicative maximum (RM32,800 over 48 months) is the same figure the
+   officer's workbench shows, with the binding limit named.
+2. **Credit Officer (noraini)** — Portfolio Overview → *What needs attention today*. Open
+   **Kpl Mohd Ridzuan, APP-104310**: maximum supportable financing reads **RM0** with the reasons
+   (commitments use 56% of net pay against 40%; KT exposure RM14,200 over the RM14,000 cap) — not "−200".
+   Try to approve the RM120,000 contract case: refused, above the officer's authority.
+3. **Document Intelligence** — open a *slip gaji*; click *Gross Monthly*: the box lands on RM4,680.00 on
+   the rendered payslip, at any zoom.
+4. **Senior Officer (aisha)** — Member 360 → **Mej (B) Ramasamy**: the *Possible bankruptcy* section
+   (restricted, access logged) with drivers, recommended support and the national context. Then
+   **Cross-selling options**: takaful / financing / retention with the reason chain for each member.
+5. **KT Assistant** — ask *"Which Lumut cases are waiting on documents?"* or *"Jumlah pembiayaan mengikut
+   cawangan"*: it calls data tools, draws a chart and reports how many of its figures were traced to data.
+6. **Board (zulkifli)** — **Management Cockpit**: hover the trend for every value; click the legend to hide
+   a line. **Policy Sandbox**: move the DSR ceiling, replay the portfolio, read which members change
+   outcome, and propose. Sign in as **rohana** to approve it as the second Board member — the policy version
+   increments and the change takes effect. **Decision Ledger**: every record in plain language, the raw JSON
+   one click away.
+
+## Deployment (Linux / DGX Spark)
+
+`ops/cios.service` is the reference systemd user unit (MYT timezone, `qwen3:30b`). The public URL is a
+Tailscale Funnel to `127.0.0.1:8899`.
 
 ```bash
-ops/status.sh    # service states + the current public URL
-ops/url.sh       # just the public URL
-ops/smoke.sh     # end-to-end check (pass a base URL to test a different host)
+ops/status.sh        # service, model, public endpoint
+ops/smoke.sh http://127.0.0.1:8899           # HTTP smoke test (SMOKE_LLM=1 adds the model paths)
+ops/bench_llm.sh     # tokens/s and latency per model
 ```
 
-A `trycloudflare.com` quick tunnel hostname is **ephemeral** — Cloudflare mints a new one every
-time `cloudflared` starts, so restarting `cios-tunnel` changes the URL (restarting `cios` does
-not). `ops/tunnel.sh` writes the current hostname to `~/.local/state/cios/public_url` and appends
-to `url_history`. For a URL that never changes, run a *named* tunnel instead — that needs a
-Cloudflare account and domain (`cloudflared tunnel login`).
+## Tests
 
-**The platform works without a model too.** If Ollama isn't running, every agent falls back to its
-deterministic position and the UI marks those positions `rule-based`. Nothing breaks.
-
----
-
-## The 6-minute demo
-
-1. **Portfolio Overview** — pipeline, approval rate, exposure-weighted predicted delinquency, risk
-   mix, AI highlights, and members drifting from their own baseline.
-2. **Applications → David Carter (APP-104328)** → **Open Workbench**.
-3. Press **Run Council**. Five specialists reason one after another, a **Challenger** attacks the
-   emerging conclusion, and the Policy agent **revises its position** in response. Takes ~20 s.
-4. Open the **Documents & evidence** tab, then **Document Intelligence** in the sidebar. Click any
-   extracted field — `Net Monthly`, say — and the box is drawn on the actual PDF where the value was
-   found. Scroll down for the cross-source reconciliation: application vs payslip vs bank vs core
-   data, with the 17.3% income variance flagged as *a verification item, not an allegation of fraud*.
-5. Back in the workbench, read **What changes the outcome?** and then **Approve** a clean case
-   (James Lee, APP-104172) — an approval token is issued, the execution service creates the facility
-   and the amortisation schedule, and monitoring starts.
-6. **Early Warning** — David Carter has been a perfect payer for 14 months and has now slipped. The
-   change point is detected against *his own* baseline, corroborated by salary-deduction and savings
-   data, and suppressed where a known bank outage explains it. Daniel Brooks is in **RECOVERY**.
-7. **Collections** — the same members, ranked by expected value, each with a *why now* and a next
-   best action. Press **Draft message** — the local model writes it, and it is a draft requiring
-   officer approval.
-8. **Policy Sandbox** — drag the DSR ceiling to 34% and **Run simulation**. Every frozen snapshot is
-   replayed; you see which five cases change outcome and which segments are affected. Nothing
-   touches production.
-9. **Autonomy Dial / kill switch** — move the dial, or engage the kill switch, and watch the routing
-   on any case change to `HUMAN`.
-10. **Decision Ledger** → type `APP-104172` → **Reconstruct**. Eleven steps from snapshot to
-    outcome, hash-chained and verified.
-11. **Member Assistant** — ask "I lost my job and I'm worried about next month's payment". It never
-    states a credit decision; it detects the hardship cue and creates a support task.
-
----
-
-## What is actually implemented
-
-| Layer | Implementation |
-|---|---|
-| **Policy & affordability** | Pure Python. Annuity instalment, DSR, tenure, exposure, term, product ceilings, authority bands, maximum supportable financing. Advisory gates route to a person; hard gates fail the case. |
-| **Credit risk** | scikit-learn: logistic regression + gradient boosting with isotonic calibration, trained at startup on a 6,000-row synthetic population; additive log-odds contributions produce controlled reason codes (R01–R10). Probabilities are shrunk toward the base rate so no case is ever claimed at 0% or 100%. |
-| **Fraud & integrity** | Deterministic rules + Isolation Forest + a guarantor/device relationship graph. A high score is an *investigation signal*, never a finding of fraud. |
-| **Document intelligence** | Classification, field extraction with per-field confidence and **bounding boxes**, forensics (tamper, font consistency, metadata, duplicate hash), cross-source reconciliation and exception detection. Uploaded PDFs are really parsed with `pypdf`. |
-| **Longitudinal member intelligence** | CUSUM change-point detection against each member's own baseline, a logistic 30/90-day forecast, corroboration and suppression rules, a five-state machine with hysteresis, and recovery detection. |
-| **AI Credit Council** | A bounded workflow, not a chatroom: 5 specialists → Challenger → targeted revision → Synthesizer. Each agent sees only the evidence in its remit and must cite evidence ids. |
-| **Grounding discipline** | Two checks. Citations not in the evidence register are stripped and counted. **Any figure the model writes triggers a rewrite** — the reasoning is replaced with the engine's own wording and the model's draft is kept for audit. The governance dashboard counts both. |
-| **Autonomy & execution** | A board-set Autonomy Dial with hard limits is the only path to autonomous execution, plus a kill switch. Approval tokens and idempotency keys guard the execution service, which is the only privileged writer. |
-| **Decision ledger** | SQLite, append-only, SHA-256 hash-chained, with full-chain verification and 11-step case reconstruction. |
-| **Assistants** | A case copilot with hybrid policy retrieval and token streaming, and a member assistant that is prohibited from stating a credit decision and hands hardship and complaint cues to a person. |
-
-### Where the model is and isn't used
-
-The local model **never** computes eligibility, affordability, risk, fraud, a forecast or a routing
-decision. It writes the *language* of an agent's position, the Challenger's question, outreach
-drafts and copilot answers. Its stance can escalate a position (with a stated reason) but never
-soften one. This is visible in the UI: every rewritten claim is labelled, and the model's original
-draft is one click away.
-
----
-
-## Light and dark
-
-The sun/moon control in the top bar switches theme. A first visit follows the operating system's
-preference; the choice is then remembered per browser and applied before first paint, so a reload
-never flashes the wrong theme. Both themes are driven by one token set — no component carries a
-raw colour — which is why charts, gauges and SVG follow the switch too.
-
-## Roles
-
-Switch role in the bottom-left. Credit Officer, Senior Officer, Collections Officer, Risk Manager,
-Compliance Officer, Branch Manager, Board/Governance, Member — each lands on the surface that
-matters to them.
-
-## Layout
-
-```
-backend/
-  main.py            FastAPI surface — 36 routes
-  domain.py          case assembly, snapshot freezing
-  council.py         AI Credit Council orchestration + grounding checks
-  llm.py             Ollama client (small models only)
-  store.py           SQLite: ledger, decisions, governance config
-  seed.py            synthetic members, applications, documents, policies
-  engines/           policy.py  risk.py  fraud.py  lmi.py  docs.py
-frontend/            no build step — ES modules, hand-written CSS
-ops/                 always-on deployment: tunnel + status/url helpers
-demo_files/          synthetic PDFs / PNG / CSVs used as real evidence
-data/cios.db         created on first run
+```bash
+.venv/bin/python -m pytest tests -q                                   # policy, seed, documents, API, language, distress
+CIOS_EVAL_LLM=1 .venv/bin/python -m pytest tests/test_assistant_eval.py -s   # 24-question BM/EN assistant evaluation
+.venv/bin/python tests/e2e_browser.py http://127.0.0.1:8899 shots --llm      # every role and view in a real browser
+.venv/bin/python tests/bbox_check.py data/docs                         # every highlight box contains its value
 ```
 
-## Scope
+## How it fits together
 
-All names, figures, documents and predictions are **synthetic**. The platform does not connect to a
-real core banking system and makes no real credit decisions. The architecture is arranged so a
-production backend can replace the simulated data and services without redesigning the flows.
+* `backend/seed.py` — KT branches, products (flat profit rates), members across TD / TLDM / TUDM / MINDEF /
+  veterans, applications, collections; all dated relative to the demo day.
+* `backend/docgen.py` — generates the evidence (slip gaji, penyata bank, surat pengesahan, MyKad, ANGKASA
+  schedule, SSM, Borang B …) and records where every value is drawn, so highlights are exact.
+* `backend/engines/policy.py` — DSR on verified net pay, the 60%-of-gross deduction cap, exposure and product
+  limits; the maximum supportable financing never goes below zero and names its binding limit.
+* `backend/engines/distress.py`, `crosssell.py` — possible-bankruptcy outlook (calibrated to ~0.3%) and
+  cross-sell suggestions with responsible-lending rules.
+* `backend/connectors/` — Experian CCRIS, SOLA and eKYC adapters, **simulated** until KT provides sandbox access.
+* `backend/assistant.py`, `lang.py` — Member Assistant (BM/EN, figure-checked) and the tool-calling KT Assistant.
+* `backend/auth.py` — sign-in, sessions and the role hierarchy.
+* `frontend/` — plain ES modules; PDF.js is vendored in `frontend/vendor/pdfjs` so nothing loads from the internet.

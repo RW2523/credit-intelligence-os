@@ -1,12 +1,13 @@
 import { api, icon, esc, money, pct, tag, date, dtime, drawer, closeDrawer, toast, $, $$, h } from '/lib.js';
 import { logOutreach } from '/views/members.js';
+import { t, tt, lang } from '/i18n.js';
 
 export async function collections(el) {
   const d = await api('/collections');
   el.innerHTML = `
-  <div class="page-head"><div><h1>Collections Intelligence</h1>
-    <p>A daily expected-value priority list. Reactive for past-due accounts and predictive for members whose
-       behaviour says trouble is coming before any payment is missed.</p></div>
+  <div class="page-head"><div><h1>${t('Collections')}</h1>
+    <p>${tt('A daily expected-value priority list — reactive for missed salary deductions and predictive for members whose behaviour says trouble is coming. Supportive first: rescheduling and AKPK referral precede formal collection (POL-007).',
+            'Senarai keutamaan harian — reaktif untuk potongan gaji terlepas dan ramalan untuk ahli yang menunjukkan tanda masalah. Sokongan dahulu: penjadualan semula dan rujukan AKPK (POL-007).')}</p></div>
     <div class="spacer"></div>
     <span class="tag t-grey">portfolio at risk ${money(d.total_balance)}</span>
     <span class="tag t-green">expected recovery ${money(d.total_ev)}</span></div>
@@ -63,7 +64,7 @@ export async function collections(el) {
 
 async function draftMessage(mid) {
   drawer(`<h3>Drafting outreach…</h3>`, `<div class="center" style="height:200px"><div class="spin"></div></div>`);
-  const out = await api('/collections/draft', { method: 'POST', body: { member_id: mid, channel: 'Email' } });
+  const out = await api('/collections/draft', { method: 'POST', body: { member_id: mid, channel: 'Email', lang: lang() === 'ms' ? 'ms' : 'en' } });
   drawer(`<div class="row">${icon('msg', 16)}<h3>Draft outreach</h3></div>`, `
     <div class="col" style="gap:12px">
       <div class="note amber"><b>Draft only.</b> <span class="small">${esc(out.policy_note)}</span></div>
@@ -87,18 +88,16 @@ async function draftMessage(mid) {
 
 function restructure(mid, rows) {
   const r = rows.find(x => x.member_id === mid);
-  const calc = (term, rate) => {
-    const i = rate / 100 / 12;
-    return r.balance * i / (1 - Math.pow(1 + i, -term));
-  };
+  // rescheduling keeps the flat-rate convention: balance × (1 + rate × years) ÷ months
+  const calc = (term, rate) => r.balance * (1 + rate / 100 * term / 12) / term;
   drawer(`<h3>Restructure — ${esc(r.name)}</h3>`, `
     <div class="col" style="gap:14px">
       <div class="note"><b>Balance ${money(r.balance)}</b>
         <div class="small muted">Deterministic calculation. Any offer requires officer approval and a hardship record.</div></div>
       <div class="field"><label>New term (months) — <b id="tv">36</b></label>
         <input type="range" id="term" min="12" max="72" step="6" value="36"/></div>
-      <div class="field"><label>Rate (%) — <b id="rv">9.5</b></label>
-        <input type="range" id="rate" min="4" max="16" step="0.5" value="9.5"/></div>
+      <div class="field"><label>${tt('Profit rate (% flat)', 'Kadar keuntungan (% rata)')} — <b id="rv">3.65</b></label>
+        <input type="range" id="rate" min="2" max="6" step="0.05" value="3.65"/></div>
       <div class="card"><div class="card-b">
         <dl class="kv"><dt>New monthly instalment</dt><dd><b id="pay">—</b></dd>
         <dt>Total repayable</dt><dd id="tot">—</dd>

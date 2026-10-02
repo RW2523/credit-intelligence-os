@@ -1,5 +1,8 @@
 import { api, sse, icon, esc, money, num, pct, tag, toneFor, drawer, closeDrawer, toast,
          date, dtime, gauge, barChart, stepChart, h, $, $$ } from '/lib.js';
+import { t, tt, lang } from '/i18n.js';
+import { state } from '/app.js';
+import { askDrawer } from '/views/assistant.js';
 
 let filters = { q: '', product: '', branch: '', risk: '', status: '', officer: '' };
 
@@ -13,11 +16,11 @@ export async function applications(el, param) {
 
   el.innerHTML = `
   <div class="page-head">
-    <div><h1>Applications</h1><p>${rows.length} case${rows.length === 1 ? '' : 's'} in the queue.
-      Every row carries its own deterministic policy result, calibrated risk and evidence completeness.</p></div>
+    <div><h1>${t('Applications')}</h1><p>${rows.length} ${tt('financing cases in the queue. Every row carries its own deterministic policy result, the 60% salary-deduction check, calibrated risk and evidence completeness.',
+      'kes pembiayaan dalam baris gilir. Setiap baris membawa keputusan dasar, semakan had potongan gaji 60%, risiko dan kelengkapan bukti.')}</p></div>
     <div class="spacer"></div>
     <button class="btn" id="bulkDocs">${icon('send')} Request documents</button>
-    <button class="btn primary" data-go="intake">${icon('plus')} New application</button>
+    ${state.user.views.includes('intake') ? `<button class="btn primary" data-go="intake">${icon('plus')} ${t('New Application')}</button>` : ''}
   </div>
 
   <div class="card" style="margin-bottom:14px"><div class="card-b row wrap" style="gap:10px">
@@ -37,8 +40,9 @@ export async function applications(el, param) {
   <div class="card"><div class="tw"><table>
     <thead><tr>
       <th style="width:26px"><input type="checkbox" id="all"/></th>
-      <th>Applicant</th><th>Product</th><th class="r">Amount</th><th>Policy</th><th>DSR</th>
-      <th>Risk</th><th>Integrity</th><th>Docs</th><th>AI recommendation</th><th>Route</th><th>Next</th><th></th>
+      <th>${tt('Applicant', 'Pemohon')}</th><th>${t('Product')}</th><th class="r">${t('Amount')}</th><th>${tt('Policy', 'Dasar')}</th><th>DSR</th>
+      <th title="${tt('Total salary deductions as % of gross pay (cap 60%)', 'Jumlah potongan gaji sebagai % gaji kasar (had 60%)')}">${tt('Deductions', 'Potongan')}</th>
+      <th>${tt('Risk', 'Risiko')}</th><th>${tt('Integrity', 'Integriti')}</th><th>${t('Documents')}</th><th>${tt('AI recommendation', 'Cadangan AI')}</th><th>${tt('Route', 'Laluan')}</th><th>${tt('Next', 'Seterusnya')}</th><th></th>
     </tr></thead>
     <tbody>${rows.map(r => `<tr class="clickable" data-id="${r.id}">
       <td onclick="event.stopPropagation()"><input type="checkbox" class="sel" value="${r.id}"/></td>
@@ -49,6 +53,7 @@ export async function applications(el, param) {
       <td class="r num" style="font-weight:600">${money(r.amount)}</td>
       <td>${tag(r.policy)}</td>
       <td class="num small">${r.dsr}%</td>
+      <td class="num small" style="color:${r.deduction_ratio > 60 ? 'var(--red)' : 'inherit'}">${r.deduction_ratio == null ? '<span class="dim">n/a</span>' : r.deduction_ratio + '%'}</td>
       <td>${tag(r.risk)}<div class="tiny dim num">PD ${pct(r.pd, 1)}</div></td>
       <td>${tag(r.fraud)}</td>
       <td><span class="tag ${r.docs.v < r.docs.t ? 't-amber' : 't-green'}">${r.docs.v}/${r.docs.t}</span></td>
@@ -88,8 +93,10 @@ async function quickLook(id) {
         <span class="tag t-grey">${esc(c.application.product)}</span>
         <span class="tag t-blue">${money(c.application.amount)}</span></div>
       <dl class="kv">
-        <dt>Instalment</dt><dd>${money(p.instalment)} / month</dd>
-        <dt>Debt service ratio</dt><dd>${p.dsr}% <span class="dim">of ${p.dsr_ceiling}%</span></dd>
+        <dt>${tt('Instalment', 'Ansuran')}</dt><dd>${money(p.instalment, 2)} / ${tt('month', 'bulan')} · ${p.rate}% ${tt('flat', 'rata')}</dd>
+        <dt>${t('Debt service ratio')}</dt><dd>${p.dsr}% <span class="dim">of ${p.dsr_ceiling}%</span></dd>
+        ${p.deduction_ratio != null ? `<dt>${t('Salary deduction cap')}</dt><dd>${p.deduction_ratio}% <span class="dim">of ${p.deduction_cap}%</span></dd>` : ''}
+        <dt>${tt('Maximum supportable', 'Maksimum disokong')}</dt><dd>${money(p.max_financing)} <span class="dim">· ${esc(p.max_financing_binding_label)}</span></dd>
         <dt>Verified income</dt><dd>${money(p.income.verified_annual)}</dd>
         <dt>Probability of default</dt><dd>${pct(r.pd, 1)}</dd>
         <dt>Evidence</dt><dd>${d.verified} / ${d.required} verified</dd>
@@ -114,12 +121,12 @@ async function quickLook(id) {
       dr.querySelector('#ow').onclick = () => { closeDrawer(); openWorkbench(id); };
       dr.querySelector('#rd').onclick = async () => {
         await api(`/applications/${id}/decision`, { method: 'POST',
-          body: { action: 'Request Information', reason: 'Outstanding mandatory evidence requested from member.' } });
+          body: { action: 'Request Information', reason: 'Outstanding mandatory evidence requested from the member via KT Online and SMS.' } });
         closeDrawer(); toast('Documents requested', 'Logged to the decision ledger.', 'good'); window.render();
       };
       dr.querySelector('#esc').onclick = async () => {
         await api(`/applications/${id}/decision`, { method: 'POST',
-          body: { action: 'Escalate', reason: 'Escalated to senior officer from the queue.' } });
+          body: { action: 'Escalate', reason: 'Escalated to a senior officer from the queue.' } });
         closeDrawer(); toast('Escalated', 'Routed to Senior Officer.', 'warn'); window.render();
       };
     }
@@ -136,22 +143,24 @@ export async function workbench(el, id) {
 
   el.innerHTML = `
   <div class="page-head">
-    <button class="btn-icon" id="back">${icon('chevron', 16, 'flip')}</button>
+    <button class="btn-icon" id="back" aria-label="${t('Back')}">${icon('back', 16)}</button>
     <div class="row" style="gap:12px">
       <div class="avatar lg">${c.member.initials}</div>
       <div><h1>${esc(c.member.name)}</h1>
-        <p class="mono tiny">${c.application.id} · member ${c.member.id} · ${esc(c.application.branch)} ·
-           submitted ${dtime(c.application.submitted)}</p></div>
+        <p class="tiny">${esc(c.member.service_label || '')} · ${esc(c.member.unit || '')}</p>
+        <p class="mono tiny">${c.application.id} · ${tt('member', 'ahli')} ${c.member.id} · ${esc(c.application.branch)} ·
+           ${tt('submitted', 'dihantar')} ${dtime(c.application.submitted)} MYT · ${esc(c.application.channel)}</p></div>
     </div>
     <div class="spacer"></div>
     <div class="col" style="align-items:flex-end;gap:4px">
       <div style="font-size:20px;font-weight:700">${money(c.application.amount)}</div>
-      <div class="tiny dim">${esc(c.application.product)} · ${c.application.term} months · ${esc(c.application.purpose)}</div>
+      <div class="tiny dim">${esc(lang() === 'ms' ? p.product_ms : c.application.product)} (${esc(p.contract)}) · ${c.application.term} ${t('months')} · ${p.rate}% ${tt('flat', 'rata')}</div>
+      <div class="tiny dim">${esc(c.application.purpose)}</div>
     </div>
   </div>
 
   <div class="grid g5" style="margin-bottom:14px">
-    ${stat('Affordability', p.affordability, `DSR ${p.dsr}% of ${p.dsr_ceiling}%`, toneFor(p.affordability))}
+    ${stat(tt('Affordability', 'Kemampuan'), p.affordability, `DSR ${p.dsr}%/${p.dsr_ceiling}%` + (p.deduction_ratio != null ? ` · ${tt('deductions', 'potongan')} ${p.deduction_ratio}%/${p.deduction_cap}%` : ''), toneFor(p.affordability))}
     ${stat('Credit risk', r.grade, `PD ${pct(r.pd, 1)} · score ${r.score}`, toneFor(r.grade))}
     ${stat('Integrity', f.level, f.headline.slice(0, 42), toneFor(f.level))}
     ${stat('Evidence', `${d.verified} / ${d.required}`, d.missing.length ? `missing ${d.missing.length}` : 'complete', d.complete ? 'green' : 'amber')}
@@ -168,7 +177,8 @@ export async function workbench(el, id) {
           ${c.routing.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
         <div class="tiny dim">The Board-set Autonomy Dial is the only path to autonomous execution.</div>
       </div></div>
-      <div class="card"><div class="card-h"><h3>What changes the outcome?</h3></div>
+      <div class="card"><div class="card-h"><h3>${tt('What changes the outcome?', 'Apa yang mengubah keputusan?')}</h3>
+        <div class="spacer"></div><span class="tag t-${p.max_financing > 0 ? 'grey' : 'red'}">${tt('max', 'maks')} ${money(p.max_financing)}</span></div>
         <div class="card-b col" style="gap:10px">
           <div><div class="up" style="color:var(--green)">Improves if</div>
             <ul class="small muted" style="padding-left:16px;line-height:1.75">
@@ -356,15 +366,21 @@ function decisionPanel(c) {
     </div>`;
   }
   const rec = c.council?.summary?.recommendation;
+  const u = state.user, amt = c.application.amount;
+  const canDecide = u.authority > 0 && amt <= u.authority;
   return `<div class="col" style="gap:12px">
+    ${!canDecide ? `<div class="note amber small">${icon('lock', 12)} ${u.authority > 0
+      ? tt(`${money(amt)} is above your approval authority of ${money(u.authority)} (POL-005) — escalate to ${c.policy.authority_required}.`,
+           `${money(amt)} melebihi had kuasa anda ${money(u.authority)} (POL-005) — rujuk kepada ${c.policy.authority_required}.`)
+      : tt(`A ${u.role_label} reviews but does not approve — request information or escalate.`, `${u.role_ms} menyemak tetapi tidak meluluskan — minta maklumat atau rujuk.`)}</div>` : ''}
     ${rec ? `<div class="note"><b>AI recommendation: ${esc(rec)}</b>
       <div class="small muted">Choosing a different outcome is an override and requires a written reason,
       which is recorded in the decision ledger.</div></div>` : ''}
     <div class="field"><label>Reason / note (required for an override)</label>
       <textarea class="inp" id="reason" rows="2" placeholder="e.g. Secondary income confirmed directly with the employer."></textarea></div>
     <div class="row wrap" style="gap:8px">
-      <button class="btn good lg" data-act="Approve">${icon('check')} Approve</button>
-      <button class="btn bad lg" data-act="Decline">${icon('x')} Decline</button>
+      <button class="btn good lg" data-act="Approve" ${canDecide ? '' : 'disabled'}>${icon('check')} ${tt('Approve', 'Lulus')}</button>
+      <button class="btn bad lg" data-act="Decline" ${canDecide ? '' : 'disabled'}>${icon('x')} ${tt('Decline', 'Tolak')}</button>
       <button class="btn warn lg" data-act="Request Information">${icon('send')} Request information</button>
       <button class="btn lg" data-act="Escalate">${icon('up')} Escalate</button>
       <div class="spacer" style="flex:1"></div>
@@ -383,8 +399,8 @@ function bindDecision(el, c) {
     b.disabled = true;
     try {
       const res = await api(`/applications/${c.application.id}/decision`, {
-        method: 'POST', body: { action, reason, actor: 'Sarah Kim', role: 'Credit Officer' } });
-      toast(`${action} recorded`, res.decision.override ? 'Override reason sealed to the ledger.' : 'Sealed to the decision ledger.', 'good');
+        method: 'POST', body: { action, reason } });
+      toast(`${action} — ${res.decision.actor}`, res.decision.override ? 'Override reason sealed to the ledger.' : 'Sealed to the decision ledger.', 'good');
       await workbench(el, c.application.id);
       if (res.execution) showExecution(res.execution);
     } catch (e) { toast('Not recorded', e.message, 'bad'); b.disabled = false; }
@@ -400,15 +416,16 @@ const execHTML = x => `<div class="card"><div class="card-h">${icon('layers', 15
   <div class="sep"></div>
   <div class="row wrap small muted" style="gap:16px">
     <span>Instalment <b class="num" style="color:var(--ink)">${money(x.instalment)}</b></span>
-    <span>Rate <b style="color:var(--ink)">${x.rate}%</b></span>
+    <span>${t('Profit rate')} <b style="color:var(--ink)">${x.rate}% ${tt('flat', 'rata')}</b></span>
+    <span>${esc(x.contract || '')} · ${esc(x.channel || '')}</span>
     <span>Term <b style="color:var(--ink)">${x.term} months</b></span>
     <span>First due <b style="color:var(--ink)">${date(x.first_due)}</b></span>
     <span class="mono dim">token ${esc(String(x.token).slice(0, 16))}…</span></div>
   <div class="tw" style="margin-top:10px"><table><thead><tr><th>#</th><th>Due</th><th class="r">Amount</th>
-    <th class="r">Principal</th><th class="r">Interest</th><th class="r">Balance</th></tr></thead>
+    <th class="r">${tt('Financing', 'Pembiayaan')}</th><th class="r">${tt('Profit', 'Keuntungan')}</th><th class="r">${tt('Balance', 'Baki')}</th></tr></thead>
     <tbody>${x.schedule.map(s => `<tr><td>${s.n}</td><td class="small">${date(s.due)}</td>
       <td class="r num">${money(s.amount, 2)}</td><td class="r num">${money(s.principal, 2)}</td>
-      <td class="r num">${money(s.interest, 2)}</td><td class="r num">${money(s.balance, 2)}</td></tr>`).join('')}</tbody></table></div>
+      <td class="r num">${money(s.profit ?? s.interest, 2)}</td><td class="r num">${money(s.balance, 2)}</td></tr>`).join('')}</tbody></table></div>
   </div></div>`;
 
 function showExecution(x) {
@@ -416,45 +433,6 @@ function showExecution(x) {
     <div class="note green"><b>${esc(x.account)} created in the core system</b>
       <div class="small">Approval token validated, idempotency key ${esc(x.idempotency_key)}.</div></div>
     ${execHTML(x)}</div>`, { wide: true });
-}
-
-// ------------------------------------------------------------- ask AI
-export function askDrawer(appId, who) {
-  drawer(`<div class="row">${icon('msg', 16)}<h3>Ask Credit AI${who ? ` — ${esc(who)}` : ''}</h3></div>`, `
-    <div class="col" style="gap:12px">
-      <div class="note"><b>Grounded assistant.</b> <span class="small">It answers only from this case's frozen
-        snapshot, its registered evidence and the policy library. It will not state a credit decision.</span></div>
-      <div class="chips" id="suggest">
-        ${['Why is this applicant at this risk grade?', 'Which policies apply to this case?',
-           'Compare the payslip with the bank statement.', 'What evidence is missing?',
-           'What would change the recommendation?'].map(q => `<button class="chip">${esc(q)}</button>`).join('')}
-      </div>
-      <div class="chat" id="chat"></div>
-      <div class="row"><input class="inp" id="qin" placeholder="Ask about this case…"/>
-        <button class="btn primary" id="send">${icon('send')}</button></div>
-    </div>`, {
-    wide: false,
-    onMount: dr => {
-      const chat = dr.querySelector('#chat'), input = dr.querySelector('#qin');
-      const send = async () => {
-        const q = input.value.trim(); if (!q) return;
-        input.value = '';
-        chat.insertAdjacentHTML('beforeend', `<div class="msg me">${esc(q)}</div>`);
-        const bubble = h(`<div class="msg ai"><span class="pulse"></span></div>`);
-        chat.appendChild(bubble); chat.scrollTop = chat.scrollHeight;
-        let text = '';
-        sse('/ask', {
-          meta: m => bubble.innerHTML = '',
-          token: t => { text += t.t; bubble.textContent = text; chat.scrollTop = chat.scrollHeight; },
-          done: () => { chat.scrollTop = chat.scrollHeight; },
-          error: e => bubble.textContent = 'Assistant unavailable: ' + e.message,
-        }, { method: 'POST', body: { question: q, application_id: appId } });
-      };
-      dr.querySelector('#send').onclick = send;
-      input.onkeydown = e => { if (e.key === 'Enter') send(); };
-      dr.querySelectorAll('#suggest .chip').forEach(b => b.onclick = () => { input.value = b.textContent; send(); });
-    }
-  });
 }
 
 // ---------------------------------------------------------------- tabs
@@ -524,19 +502,26 @@ function renderTab(el, c) {
       <div class="col" style="gap:12px">
         <div class="up">Affordability calculation</div>
         <dl class="kv">
-          <dt>Declared annual income</dt><dd>${money(p.income.declared_annual)}</dd>
-          <dt>Payslip (annualised)</dt><dd>${money(p.income.payslip_annual)}</dd>
-          <dt>Bank deposits (annualised)</dt><dd>${money(p.income.bank_annual)}</dd>
-          <dt><b>Verified income used</b></dt><dd><b>${money(p.income.verified_annual)}</b></dd>
-          <dt>Verified monthly net</dt><dd>${money(p.income.verified_monthly, 2)}</dd>
-          <dt>Existing commitments</dt><dd>${money(p.existing_commitments)}</dd>
-          <dt>New instalment</dt><dd>${money(p.instalment, 2)}</dd>
-          <dt><b>Total obligations</b></dt><dd><b>${money(p.total_obligations, 2)}</b></dd>
-          <dt>Debt service ratio</dt><dd><b style="color:var(--${p.dsr <= p.dsr_ceiling ? 'green' : 'red'})">${p.dsr}%</b> of ${p.dsr_ceiling}%</dd>
-          <dt>Maximum supportable financing</dt><dd>${money(p.max_financing)}</dd>
+          <dt>${tt('Declared annual income (before financing)', 'Pendapatan tahunan diisytihar (sebelum pembiayaan)')}</dt><dd>${money(p.income.declared_annual)}</dd>
+          <dt>${tt('Payslip — gross less statutory & other (annualised)', 'Slip gaji — kasar tolak statutori & lain (setahun)')}</dt><dd>${money(p.income.payslip_annual)}</dd>
+          <dt>${tt('Bank salary credits + payroll financing (annualised)', 'Kredit gaji bank + potongan pembiayaan (setahun)')}</dt><dd>${money(p.income.bank_annual)}</dd>
+          <dt><b>${tt('Verified income used', 'Pendapatan disahkan digunakan')}</b></dt><dd><b>${money(p.income.verified_annual)}</b></dd>
+          <dt>${tt('Verified monthly net', 'Bersih bulanan disahkan')}</dt><dd>${money(p.income.verified_monthly, 2)}</dd>
+          <dt>${tt('Existing financing deductions', 'Potongan pembiayaan sedia ada')}</dt><dd>${money(p.existing_commitments)}</dd>
+          <dt>${tt('New instalment', 'Ansuran baharu')} (${p.rate}% ${tt('flat', 'rata')})</dt><dd>${money(p.instalment, 2)}</dd>
+          <dt><b>${tt('Total financing obligations', 'Jumlah obligasi pembiayaan')}</b></dt><dd><b>${money(p.total_obligations, 2)}</b></dd>
+          <dt>${t('Debt service ratio')}</dt><dd><b style="color:var(--${p.dsr <= p.dsr_ceiling ? 'green' : 'red'})">${p.dsr}%</b> of ${p.dsr_ceiling}%</dd>
+          ${p.deduction_ratio != null ? `<dt>${tt('Gross pay / other deductions', 'Gaji kasar / potongan lain')}</dt><dd>${money(p.gross_monthly, 2)} / ${money(p.other_deductions, 2)}</dd>
+          <dt>${tt('Total salary deductions vs gross', 'Jumlah potongan gaji berbanding kasar')}</dt><dd><b style="color:var(--${p.deduction_ratio <= p.deduction_cap ? 'green' : 'red'})">${p.deduction_ratio}%</b> of ${p.deduction_cap}%</dd>` : ''}
+          <dt>${tt('Total profit over the tenure', 'Jumlah keuntungan sepanjang tempoh')}</dt><dd>${money(p.total_profit, 2)}</dd>
+          <dt><b>${tt('Maximum supportable financing', 'Pembiayaan maksimum disokong')}</b></dt><dd><b>${money(p.max_financing)}</b></dd>
         </dl>
-        <div class="note ${p.income.material_variance ? 'amber' : ''}"><b>Income basis</b>
-          <div class="small">${esc(p.income.basis)} — ${p.income.variance_pct}% variance.</div></div>
+        <div class="note ${p.max_financing > 0 ? 'brand' : 'red'}"><b>${tt('Why this maximum', 'Kenapa maksimum ini')}</b>
+          <div class="small">${esc(p.max_financing_note || '')}</div>
+          <div class="row wrap" style="gap:6px;margin-top:6px">${Object.entries(p.max_financing_limits).map(([k, v]) =>
+            `<span class="tag t-${k === p.max_financing_binding ? 'amber' : 'grey'}">${esc({ dsr: 'DSR', deduction_cap: '60% cap', exposure: tt('exposure', 'pendedahan'), product_ceiling: tt('product max', 'had produk') }[k])} ${money(v)}</span>`).join('')}</div></div>
+        <div class="note ${p.income.material_variance ? 'amber' : ''}"><b>${tt('Income basis', 'Asas pendapatan')}</b>
+          <div class="small">${esc(p.income.basis)} — ${p.income.variance_pct}% ${tt('variance', 'varians')}.${p.income.note ? ' ' + esc(p.income.note) : ''}</div></div>
       </div>
       <div class="col" style="gap:12px">
         <div class="up">Policy gates · ${esc(p.policy_version)}</div>
@@ -546,8 +531,8 @@ function renderTab(el, c) {
             <div class="tiny dim">${esc(g.id)} · requires ${esc(g.required)}</div></div>
           <span class="mono small">${esc(g.actual)}</span></div>`).join('')}
         <div class="note ${p.result === 'PASS' ? 'green' : 'red'}"><b>Policy result: ${esc(p.result)}</b>
-          <div class="small">Authority required: ${esc(p.authority_required)}. Exposure ${money(p.exposure)} against a
-            ${money(p.exposure_cap)} cap.</div></div>
+          <div class="small">${tt('Authority required', 'Kuasa diperlukan')}: ${esc(p.authority_required)}. ${tt('Exposure', 'Pendedahan')} ${money(p.exposure)} ${tt('against a', 'berbanding had')}
+            ${money(p.exposure_cap)} ${tt('cap', '')}.</div></div>
       </div></div>`;
   }
   if (tab === 'risk') {
@@ -584,7 +569,16 @@ function renderTab(el, c) {
             <div class="tiny dim">${esc(x.detail)}</div></div></div>`).join('')}
         ${f.graph.length ? `<div class="up" style="margin-top:6px">Relationship graph</div>
           ${f.graph.map(g => `<div class="small muted">${esc(g.a)} ↔ ${esc(g.b)} — ${esc(g.kind)}</div>`).join('')}` : ''}
-        <div class="up" style="margin-top:6px">Document hashes</div>
+        ${c.external ? `<div class="up" style="margin-top:6px">${tt('External data', 'Data luaran')} <span class="tag t-amber">${tt('simulated', 'simulasi')}</span></div>
+          <dl class="kv">
+            <dt>Experian CCRIS</dt><dd>${c.external.ccris.facility_count} ${tt('facilities', 'kemudahan')} · ${money(c.external.ccris.total_outstanding)}</dd>
+            <dt>${tt('Worst arrears elsewhere (12m)', 'Tunggakan terburuk di tempat lain (12b)')}</dt><dd>${c.external.ccris.max_dpd_12m} ${tt('days', 'hari')}</dd>
+            <dt>${tt('Recent inquiries', 'Pertanyaan terkini')}</dt><dd>${c.external.ccris.recent_inquiries}</dd>
+            <dt>${tt('Legal status / blacklist', 'Status undang-undang / senarai hitam')}</dt><dd>${esc(c.external.ccris.legal_status)} · ${c.external.ccris.blacklisted ? 'TCS hit' : tt('no TCS hit', 'tiada padanan TCS')}</dd>
+            <dt>SOLA ${tt('deduction headroom', 'ruang potongan')}</dt><dd>${money(c.external.sola.monthly_headroom)}/${tt('month', 'bulan')}</dd>
+            <dt>eKYC</dt><dd>${esc(c.external.ekyc.status)} · ${tt('face match', 'padanan wajah')} ${c.external.ekyc.face_match}</dd>
+          </dl>` : ''}
+        <div class="up" style="margin-top:6px">${tt('Document hashes', 'Hash dokumen')}</div>
         ${f.doc_hashes.map(x => `<div class="row small"><span style="flex:1">${esc(x.doc)}</span>
           <span class="mono dim">${esc(x.hash)}</span></div>`).join('')}
       </div></div>`;
@@ -594,15 +588,17 @@ function renderTab(el, c) {
     el.innerHTML = `<div class="grid g2">
       <div class="col" style="gap:12px">
         <dl class="kv">
-          <dt>Member since</dt><dd>${date(m.since)} (${p.tenure_months} months)</dd>
-          <dt>Branch</dt><dd>${esc(m.branch)}</dd>
-          <dt>Savings</dt><dd>${money(m.savings)}</dd>
-          <dt>Share capital</dt><dd>${money(m.share_capital)}</dd>
-          <dt>Current financing</dt><dd>${money(m.outstanding)}</dd>
-          <dt>Prior facilities</dt><dd>${m.prior_loans}</dd>
-          <dt>Payment reliability</dt><dd>${m.reliability}%</dd>
-          <dt>Employer</dt><dd>${esc(m.employer)}</dd>
-          <dt>Employment</dt><dd>${esc(m.employment)}</dd>
+          <dt>${tt('Service', 'Perkhidmatan')}</dt><dd>${esc(m.display_rank)} · ${esc(m.service_label)}</dd>
+          <dt>${tt('Service no. / MyKad', 'No. tentera / MyKad')}</dt><dd class="mono">${esc(m.service_no)} · ${esc(m.mykad)}</dd>
+          <dt>${tt('Unit / camp', 'Pasukan / kem')}</dt><dd>${esc(m.unit)} · ${esc(m.camp)}</dd>
+          <dt>${tt('Member since', 'Ahli sejak')}</dt><dd>${date(m.since)} (${p.tenure_months} ${t('months')})</dd>
+          <dt>${tt('Compulsory retirement', 'Bersara wajib')}</dt><dd>${m.retirement_date ? date(m.retirement_date) : tt('Retired', 'Bersara')}</dd>
+          <dt>${t('Branch')}</dt><dd>${esc(m.branch)}</dd>
+          <dt>${t('Savings')} / ${t('Share capital')}</dt><dd>${money(m.savings)} / ${money(m.share_capital)}</dd>
+          <dt>${tt('KT financing outstanding', 'Baki pembiayaan KT')}</dt><dd>${money(m.outstanding)}</dd>
+          <dt>${tt('Repayment channel', 'Saluran bayaran balik')}</dt><dd>${esc(m.repayment_channel)}</dd>
+          <dt>${tt('Prior financings repaid', 'Pembiayaan terdahulu dijelaskan')}</dt><dd>${m.prior_financings}</dd>
+          <dt>${tt('Deduction reliability', 'Kebolehpercayaan potongan')}</dt><dd>${m.reliability}%</dd>
         </dl>
         <button class="btn" data-member="${m.id}">${icon('user')} Open full Member 360</button>
       </div>

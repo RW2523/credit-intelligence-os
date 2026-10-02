@@ -9,11 +9,14 @@ anything — the Autonomy Dial and the human own the decision.
 from __future__ import annotations
 import json, re, asyncio
 import llm
+from fmt import rm
 
 STANCES = ["Support", "Caution", "Concern", "Oppose"]
 
 SYSTEM = (
-    "You are a specialist member of a credit union's AI Credit Council. "
+    "You are a specialist member of the AI Credit Council of Koperasi Tentera, a Malaysian credit co-operative "
+    "serving Armed Forces personnel, MINDEF civil servants and veterans. It offers Islamic financing: say "
+    "'financing' (never 'loan'), 'profit rate' (never 'interest'), 'takaful' (never 'insurance'). "
     "You reason ONLY from the FACTS given. Never invent numbers, names, policies or documents — "
     "if a number is not in the facts, do not mention it. Every claim must cite an evidence id. "
     "Your POSITION has already been derived from the deterministic engines: write the reasoning that "
@@ -25,8 +28,9 @@ SYSTEM = (
     "Reply with strict JSON only."
 )
 
-SCHEMA = ('{"headline":"one sentence, max 20 words, states your position in plain language",'
-          '"reasoning":"2-3 sentences citing the specific numbers in the facts",'
+SCHEMA = ('{"headline":"one sentence, max 18 words, no digits",'
+          '"reasoning":"two sentences in words only — no digits, amounts or percentages; say \'the debt service ratio\', '
+          '\'the declared income\', \'the exposure limit\' instead",'
           '"evidence":["E-XXX",...],"escalate":false,"escalate_reason":""}')
 
 AGENTS = [
@@ -54,11 +58,15 @@ def build_facts(case: dict) -> dict:
     def add(eid, kind, text, ref=None):
         ev[eid] = dict(id=eid, kind=kind, text=text, ref=ref)
 
-    add("E-APP", "application", f"{a['product']} of ${a['amount']:,} over {a['term']} months for {a['purpose']}.", a["id"])
+    add("E-APP", "application", f"{a['product']} ({p['contract']}) of {rm(a['amount'])} over {a['term']} months "
+        f"for {a['purpose']}.", a["id"])
     add("E-POL", "policy", f"Policy {p['policy_version']}: DSR {p['dsr']}% against a {p['dsr_ceiling']}% ceiling; "
-        f"instalment ${p['instalment']:,.0f}; eligibility {p['eligibility']}; affordability {p['affordability']}; "
-        f"gates failing: {', '.join(p['failures']) or 'none'}.", "POL-001")
-    add("E-INC", "income", f"Declared income ${p['income']['declared_annual']:,}; verified ${p['income']['verified_annual']:,}; "
+        + (f"total salary deductions {p['deduction_ratio']}% of gross against the {p['deduction_cap']}% cap; "
+           if p['deduction_ratio'] is not None else "")
+        + f"instalment {rm(p['instalment'])} at {p['rate']}% flat; eligibility {p['eligibility']}; "
+        f"affordability {p['affordability']}; gates failing: {', '.join(p['failures']) or 'none'}. "
+        f"Maximum supportable financing {rm(p['max_financing'])} ({p['max_financing_binding_label']}).", "POL-001")
+    add("E-INC", "income", f"Declared income {rm(p['income']['declared_annual'])}; verified {rm(p['income']['verified_annual'])}; "
         f"variance {p['income']['variance_pct']}% ({p['income']['basis']}).", "POL-003")
     add("E-RISK", "model", f"Risk model {r['model_version']}: probability of default {r['pd']*100:.1f}% ({r['grade']}, band {r['band']}); "
         f"score {r['score']}. Top reason codes: {'; '.join(r['reason_codes']) or 'none'}.", r["model_version"])
@@ -68,9 +76,10 @@ def build_facts(case: dict) -> dict:
         f"Missing: {', '.join(d['missing']) or 'none'}.", "POL-008")
     for i, x in enumerate(rec["exceptions"][:3]):
         add(f"E-EXC{i+1}", "exception", f"{x['title']} — {x['detail']} ({x['classification']}).", x["policy"])
-    add("E-MEM", "member", f"Member since {m['since']} ({p['tenure_months']} months); {m['prior_loans']} prior facilities; "
-        f"{m['reliability']}% payment reliability; savings ${m['savings']:,} and share capital ${m['share_capital']:,}; "
-        f"current outstanding ${m['outstanding']:,}.", m["id"])
+    add("E-MEM", "member", f"{m.get('service_label', '')} member since {m['since']} ({p['tenure_months']} months); "
+        f"{m['prior_financings']} prior financings repaid; {m['reliability']}% deduction reliability; savings (Simpanan) "
+        f"{rm(m['savings'])} and share capital (Modal Syer) {rm(m['share_capital'])}; current KT outstanding "
+        f"{rm(m['outstanding'])}.", m["id"])
     if case.get("lmi"):
         l = case["lmi"]
         add("E-LMI", "behaviour", f"Longitudinal state {l['state']['state']}; 30-day late-payment probability "
@@ -112,7 +121,8 @@ def prior(agent_id: str, case: dict) -> dict:
     if agent_id == "policy":
         if p["result"] == "FAIL":
             return dict(stance="Oppose", confidence=0.9, headline=f"Hard policy gate fails: {', '.join(p['failures'])}.",
-                        reasoning=f"DSR is {p['dsr']}% against a {p['dsr_ceiling']}% ceiling. Maximum supportable financing is ${p['max_financing']:,.0f}.",
+                        reasoning=f"DSR is {p['dsr']}% against a {p['dsr_ceiling']}% ceiling. "
+                                  + case["policy"].get("max_financing_note", ""),
                         evidence=["E-POL"])
         if p["headroom"] < 5:
             return dict(stance="Caution", confidence=0.72, headline="Affordability passes but with thin headroom.",
@@ -144,13 +154,13 @@ def prior(agent_id: str, case: dict) -> dict:
         m = case["member"]
         if m["reliability"] >= 92 and case["policy"]["tenure_months"] >= 24:
             return dict(stance="Support", confidence=0.88, headline="Long-standing member with strong repayment and contribution history.",
-                        reasoning=f"{case['policy']['tenure_months']} months of membership, {m['prior_loans']} prior facilities repaid, {m['reliability']}% reliability.",
+                        reasoning=f"{case['policy']['tenure_months']} months of membership, {m['prior_financings']} prior financings repaid, {m['reliability']}% reliability.",
                         evidence=["E-MEM"])
         if m["reliability"] < 80:
             return dict(stance="Concern", confidence=0.76, headline="Repayment reliability is below the cooperative benchmark.",
-                        reasoning=f"{m['reliability']}% reliability with {m['prior_loans']} prior facilities.", evidence=["E-MEM"])
+                        reasoning=f"{m['reliability']}% reliability with {m['prior_financings']} prior financings.", evidence=["E-MEM"])
         return dict(stance="Caution", confidence=0.72, headline="Relationship is sound but comparatively short.",
-                    reasoning=f"{case['policy']['tenure_months']} months of membership and {m['prior_loans']} prior facility(ies).",
+                    reasoning=f"{case['policy']['tenure_months']} months of membership and {m['prior_financings']} prior financing(s).",
                     evidence=["E-MEM"])
     return dict(stance="Caution", confidence=0.6, headline="No position", reasoning="", evidence=[])
 
@@ -162,7 +172,7 @@ def challenger_prior(case: dict, positions: list[dict]) -> dict:
                     headline="The emerging conclusion assumes an income figure that is not corroborated.",
                     reasoning=f"Declared income differs from verified deposits by {p['income']['variance_pct']}%. "
                               "If the bank deposits exclude recurring obligations, affordability is overstated.",
-                    ask="Obtain employer confirmation or one further month of bank statements before execution.",
+                    ask="Obtain unit/employer confirmation or one further month of bank statements before disbursement.",
                     evidence=["E-INC", "E-EXC1"], target="policy")
     if d["missing"]:
         return dict(stance="Concern", confidence=0.82,
@@ -174,7 +184,7 @@ def challenger_prior(case: dict, positions: list[dict]) -> dict:
         return dict(stance="Caution", confidence=0.7,
                     headline="Model risk is being offset by relationship history that may not repeat.",
                     reasoning="Historical reliability is backward-looking; the reason codes point at current-period behaviour.",
-                    ask="Confirm no new commitments have been taken in the last 90 days.",
+                    ask="Confirm on CCRIS that no new commitments were taken in the last 90 days.",
                     evidence=["E-RISK", "E-MEM"], target="risk")
     return dict(stance="Support", confidence=0.66,
                 headline="No material weakness found in the emerging conclusion.",
@@ -226,10 +236,14 @@ def _conditions(case: dict, rec: str) -> list[str]:
     if case["documents_summary"]["missing"]:
         c.append("Receive and verify: " + ", ".join(case["documents_summary"]["missing"]))
     if case["policy"]["income"]["material_variance"]:
-        c.append("Employer confirmation of income before drawdown")
+        c.append("Unit/employer confirmation of income before disbursement")
     if rec == "APPROVE":
-        c.append(f"Standard terms at {case['policy']['rate']}% over {case['application']['term']} months")
-        c.append(f"Salary deduction mandate for ${case['policy']['instalment']:,.0f} per month")
+        c.append(f"{case['policy']['contract']} contract at {case['policy']['rate']}% flat profit rate over "
+                 f"{case['application']['term']} months")
+        if case["policy"]["by_salary_deduction"]:
+            c.append(f"Salary deduction mandate via Biro ANGKASA for {rm(case['policy']['instalment'], 2)} per month")
+        else:
+            c.append(f"Standing instruction for {rm(case['policy']['instalment'], 2)} per month")
     if case["fraud"]["level"] in ("Elevated", "Critical"):
         c.append("Integrity investigation cleared by Compliance")
     return c
@@ -276,7 +290,7 @@ def _prompt(agent: dict, case: dict, evidence: dict, extra: str = "", stance: di
            f"{stance['headline']}\n" if stance else "")
     return (f"ROLE: {agent['name']}\nREMIT: {agent['remit']}\n\n"
             f"CASE: {case['application']['id']} — {case['member']['name']}, "
-            f"{case['application']['product']}, ${case['application']['amount']:,}.\n\n"
+            f"{case['application']['product']}, {rm(case['application']['amount'])}.\n\n"
             f"EVIDENCE (cite these ids only):\n{lines}\n\n{pos}{extra}\n"
             f"Return JSON exactly of this shape:\n{SCHEMA}")
 
@@ -298,7 +312,7 @@ async def run(case: dict, emit=None):
         await send("agent_start", {"id": agent["id"], "name": agent["name"]})
         fb = prior(agent["id"], case)
         got = await llm.json_call(SYSTEM, _prompt(agent, case, evidence, stance=fb), fb,
-                                  num_predict=300)
+                                  num_predict=200, model=llm.status().get("council_model"))
         # the engines own the stance; the model owns the narrative and may escalate with a reason
         stance = fb["stance"]
         escalated = bool(got.get("escalate")) and str(got.get("escalate_reason", "")).strip()
@@ -323,7 +337,7 @@ async def run(case: dict, emit=None):
                 extra=f"EMERGING COUNCIL POSITIONS:\n{emerging}\n"
                       "Identify the single most important way this conclusion could be wrong, and state the "
                       "specific evidence that would settle it."),
-        cfb, num_predict=300)
+        cfb, num_predict=200, model=llm.status().get("council_model"))
     ch["stance"] = cfb["stance"]
     ch["confidence"] = cfb["confidence"]
     # challenger sees all evidence

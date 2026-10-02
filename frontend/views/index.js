@@ -1,8 +1,11 @@
+export { login } from '/views/login.js';
 export { overview } from '/views/overview.js';
-export { applications, workbench, openWorkbench, askDrawer } from '/views/applications.js';
+export { applications, workbench, openWorkbench } from '/views/applications.js';
 export { documents } from '/views/documents.js';
 export { members, earlyWarning } from '/views/members.js';
 export { collections } from '/views/collections.js';
 export { sandbox, governance, ledger, cockpit } from '/views/governance.js';
 export { intake } from '/views/intake.js';
-export { memberPortal } from '/views/portal.js';
+export { memberPortal, checkBorrow } from '/views/portal.js';
+export { crosssell } from '/views/crosssell.js';
+export { assistantPage, askDrawer } from '/views/assistant.js';

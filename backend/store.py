@@ -2,9 +2,21 @@
 (decisions, uploads, ledger, governance config, notifications)."""
 from __future__ import annotations
 import sqlite3, json, hashlib, datetime as dt, os, threading
+from fmt import rm
 
-DB = os.path.join(os.path.dirname(__file__), "..", "data", "cios.db")
+DB = os.environ.get("CIOS_DB") or os.path.join(os.path.dirname(__file__), "..", "data", "cios.db")
 _lock = threading.Lock()
+# bumped on every write so callers can cache derived views (case assembly) safely
+VERSION = [0]
+
+
+def bump():
+    VERSION[0] += 1
+
+
+def _now() -> str:
+    import clock                                   # lazy: clock reads the anchor from this store
+    return clock.now_iso()
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT NOT NULL);
@@ -38,7 +50,14 @@ def put(key, value):
     with _lock, conn() as c:
         c.execute("INSERT INTO kv(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v",
                   (key, json.dumps(value)))
+    bump()
     return value
+
+
+def delete(key):
+    with _lock, conn() as c:
+        c.execute("DELETE FROM kv WHERE k=?", (key,))
+    bump()
 
 
 def append_list(key, item, cap=400):
@@ -48,17 +67,18 @@ def append_list(key, item, cap=400):
 
 
 # --------------------------------------------------------------- ledger
-def ledger_append(case_id: str, stage: str, actor: str, summary: str, payload: dict) -> dict:
+def ledger_append(case_id: str, stage: str, actor: str, summary: str, payload: dict, at: str | None = None) -> dict:
     with _lock, conn() as c:
         prev = c.execute("SELECT hash FROM ledger ORDER BY seq DESC LIMIT 1").fetchone()
         prev_hash = prev["hash"] if prev else "genesis"
-        at = dt.datetime.now().isoformat(timespec="seconds")
+        at = at or _now()
         body = json.dumps(payload, sort_keys=True, default=str)
         h = hashlib.sha256(f"{prev_hash}|{at}|{case_id}|{stage}|{actor}|{summary}|{body}".encode()).hexdigest()
         cur = c.execute(
             "INSERT INTO ledger(at,case_id,stage,actor,summary,payload,prev_hash,hash) VALUES(?,?,?,?,?,?,?,?)",
             (at, case_id, stage, actor, summary, body, prev_hash, h))
         seq = cur.lastrowid
+    bump()
     return dict(seq=seq, at=at, case_id=case_id, stage=stage, actor=actor,
                 summary=summary, payload=payload, prev_hash=prev_hash, hash=h)
 
@@ -97,31 +117,35 @@ def ledger_verify() -> dict:
 
 
 # --------------------------------------------------------- governance cfg
-DEFAULT_AUTONOMY = {
-    "mode": "ASSIST",
-    "modes": ["SHADOW", "ADVISE", "ASSIST", "ACT_WITH_APPROVAL", "AUTONOMOUS_WITHIN_LIMITS"],
-    "kill_switch": False,
-    "limits": {"max_amount": 15000, "max_pd": 0.05, "min_confidence": 0.88,
-               "max_disagreement": 0.15, "products": ["Personal Loan", "Auto Loan", "Education Loan"],
-               "require_complete_docs": True, "max_fraud_score": 0.2},
-    "approved_by": "Board Resolution 2024-04",
-    "changed_at": "2024-04-01T09:00:00",
-}
-DEFAULT_THRESHOLDS = {"dsr_ceiling": None, "exposure_multiple": 4.0, "min_confidence": 0.75}
+def default_autonomy() -> dict:
+    import clock
+    return {
+        "mode": "ASSIST",
+        "modes": ["SHADOW", "ADVISE", "ASSIST", "ACT_WITH_APPROVAL", "AUTONOMOUS_WITHIN_LIMITS"],
+        "kill_switch": False,
+        "limits": {"max_amount": 15000, "max_pd": 0.05, "min_confidence": 0.88,
+                   "max_disagreement": 0.15,
+                   "products": ["Personal Financing-i", "Express Financing-i", "Fees Financing-i"],
+                   "require_complete_docs": True, "max_fraud_score": 0.2},
+        "approved_by": f"Board Resolution {clock.TODAY.year}/03",
+        "changed_at": clock.days_ago(45, 10, 0),
+    }
 
 
 def autonomy() -> dict:
-    return get("autonomy", DEFAULT_AUTONOMY)
+    return get("autonomy") or default_autonomy()
 
 
 def set_autonomy(patch: dict, actor: str) -> dict:
     cur = autonomy()
+    before = {k: cur.get(k) for k in ("mode", "kill_switch", "limits")}
     cur.update(patch)
-    cur["changed_at"] = dt.datetime.now().isoformat(timespec="seconds")
+    cur["changed_at"] = _now()
     cur["changed_by"] = actor
     put("autonomy", cur)
     ledger_append("GOVERNANCE", "Autonomy Change", actor,
-                  f"Autonomy set to {cur['mode']}; kill switch {'ON' if cur['kill_switch'] else 'off'}", cur)
+                  f"Autonomy set to {cur['mode']}; kill switch {'ON' if cur['kill_switch'] else 'off'}",
+                  dict(cur, before=before))
     return cur
 
 
@@ -145,7 +169,7 @@ def route(case: dict) -> dict:
         if s["disagreement"] > lim["max_disagreement"]:
             reasons.append(f"Agent disagreement {s['disagreement']} above the limit of {lim['max_disagreement']}")
     if case["application"]["amount"] > lim["max_amount"]:
-        reasons.append(f"Amount ${case['application']['amount']:,} above the autonomous limit of ${lim['max_amount']:,}")
+        reasons.append(f"Amount {rm(case['application']['amount'])} above the autonomous limit of {rm(lim['max_amount'])}")
     if case["risk"]["pd"] > lim["max_pd"]:
         reasons.append(f"Probability of default {case['risk']['pd']:.3f} above the limit of {lim['max_pd']}")
     if case["application"]["product"] not in lim["products"]:

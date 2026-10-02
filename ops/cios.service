@@ -1,0 +1,20 @@
+# Reference unit for ~/.config/systemd/user/cios.service (install with: systemctl --user daemon-reload)
+[Unit]
+Description=KT Credit Intelligence (FastAPI on 127.0.0.1:8899)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/Documents/fintech
+Environment=TZ=Asia/Kuala_Lumpur
+Environment=CIOS_MODEL=qwen3:30b
+Environment=CIOS_FAST_MODEL=llama3.2:3b
+Environment=OLLAMA_HOST=http://127.0.0.1:11434
+Environment=CIOS_DEMO=1
+# Environment=CIOS_TODAY=2026-10-15        # freeze "today" to the demo day
+# Environment=CIOS_SECRET=change-me        # fix the session signing key across database resets
+ExecStart=%h/Documents/fintech/.venv/bin/python -m uvicorn main:app --app-dir backend --host 127.0.0.1 --port 8899
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

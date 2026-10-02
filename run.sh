@@ -1,5 +1,5 @@
 #!/bin/bash
-# Credit Intelligence OS — one-command local launcher (Linux / macOS)
+# KT Credit Intelligence — one-command local launcher (Linux / macOS)
 set -e
 cd "$(dirname "$0")"
 PORT="${PORT:-8899}"
@@ -18,8 +18,11 @@ if [ ! -d .venv ]; then
   echo "▸ creating python environment ($PYBIN)…"
   "$PYBIN" -m venv .venv
   ./.venv/bin/pip -q install --upgrade pip
-  ./.venv/bin/pip -q install fastapi "uvicorn[standard]" numpy scikit-learn httpx python-multipart pypdf
+  ./.venv/bin/pip -q install fastapi "uvicorn[standard]" numpy scikit-learn httpx python-multipart pypdf reportlab pillow
 fi
+# reportlab and pillow generate the demo evidence; add them to an existing environment if missing
+./.venv/bin/python -c "import reportlab, PIL" 2>/dev/null || ./.venv/bin/pip -q install reportlab pillow
+export TZ="${TZ:-Asia/Kuala_Lumpur}"
 
 # local model (optional — the platform degrades to deterministic agents without it)
 if command -v ollama >/dev/null 2>&1; then
@@ -28,10 +31,10 @@ if command -v ollama >/dev/null 2>&1; then
     systemctl start ollama 2>/dev/null || (nohup ollama serve >/tmp/cios-ollama.log 2>&1 &)
     sleep 2
   fi
-  WANT="${CIOS_MODEL:-llama3.2:3b}"
+  WANT="${CIOS_MODEL:-qwen3:30b}"
   # match on the base name — a host holding llama3.2:latest already satisfies llama3.2:3b
   if ! ollama list 2>/dev/null | awk '{print $1}' | grep -q "^${WANT%%:*}:"; then
-    echo "▸ pulling small local model $WANT (one time, ~2 GB)…"
+    echo "▸ pulling local model $WANT (one time)…"
     ollama pull "$WANT" || true
   fi
 fi
@@ -39,9 +42,10 @@ fi
 if [ "${CIOS_RESET:-0}" = "1" ]; then
   echo "▸ resetting demo state…"
   rm -f data/cios.db
+  rm -rf data/docs
 fi
 
-echo "▸ Credit Intelligence OS → http://$HOST:$PORT"
+echo "▸ KT Credit Intelligence → http://$HOST:$PORT"
 if [ "${CIOS_OPEN:-1}" = "1" ]; then
   ( sleep 3
     URL="http://127.0.0.1:$PORT"

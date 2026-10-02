@@ -1,21 +1,32 @@
-import { api, icon, esc, money, pct, tag, toneFor, date, dtime, stepChart, lineChart, gauge,
+import { api, icon, esc, money, pct, tag, toneFor, date, dtime, stepChart, lineChart, barChart, gauge,
          drawer, toast, $, $$ } from '/lib.js';
+import { t, tt, lang } from '/i18n.js';
+import { state } from '/app.js';
+
+let mfilter = { q: '', branch: '' };
 
 // ---------------------------------------------------------- member list
 export async function members(el, param) {
   if (param) return member360(el, param);
-  const { rows } = await api('/members');
+  const qs = new URLSearchParams(Object.fromEntries(Object.entries(mfilter).filter(([, v]) => v))).toString();
+  const { rows } = await api('/members?' + qs);
   el.innerHTML = `
-  <div class="page-head"><div><h1>Member 360</h1>
-    <p>One unified intelligence profile per member — core data, derived timeline features and longitudinal state,
-       shared by underwriting, servicing, collections and every assistant.</p></div></div>
+  <div class="page-head"><div><h1>${t('Member 360')}</h1>
+    <p>${tt('One profile per KT member — service record, savings and share capital, KT financing, salary-deduction behaviour and longitudinal state, shared by underwriting, servicing, collections and every assistant.',
+            'Satu profil bagi setiap ahli KT — rekod perkhidmatan, simpanan dan modal syer, pembiayaan KT, tingkah laku potongan gaji dan keadaan longitudinal.')}</p></div></div>
+  <div class="card" style="margin-bottom:14px"><div class="card-b row wrap" style="gap:10px">
+    <div class="search" style="max-width:300px;margin:0"><span class="si">${icon('search', 15)}</span>
+      <input id="mq" placeholder="${tt('Name, member no. or service no.…', 'Nama, no. anggota atau no. tentera…')}" value="${esc(mfilter.q)}"/></div>
+    <select class="inp" id="mb" style="max-width:200px"><option value="">${tt('All branches', 'Semua cawangan')}</option>
+      ${state.boot.branches.map(b => `<option ${mfilter.branch === b ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select>
+    <div class="spacer" style="flex:1"></div><span class="small muted">${rows.length} ${tt('members', 'ahli')}</span></div></div>
   <div class="card"><div class="tw"><table>
-    <thead><tr><th>Member</th><th>Since</th><th>Branch</th><th class="r">Savings</th><th class="r">Share capital</th>
-      <th class="r">Outstanding</th><th>Reliability</th><th>State</th><th>30-day late risk</th><th></th></tr></thead>
+    <thead><tr><th>${tt('Member', 'Ahli')}</th><th>${tt('Service', 'Perkhidmatan')}</th><th>${t('Branch')}</th><th class="r">${t('Savings')}</th><th class="r">${t('Share capital')}</th>
+      <th class="r">${tt('KT outstanding', 'Baki KT')}</th><th>${tt('Reliability', 'Kebolehpercayaan')}</th><th>${tt('State', 'Keadaan')}</th><th>${tt('30-day late risk', 'Risiko lewat 30 hari')}</th><th></th></tr></thead>
     <tbody>${rows.map(m => `<tr class="clickable" data-m="${m.id}">
       <td><div class="row"><div class="avatar sm">${m.initials}</div>
-        <div><div style="font-weight:560">${esc(m.name)}</div><div class="tiny dim mono">${m.id}</div></div></div></td>
-      <td class="small">${date(m.since)}</td><td class="small">${esc(m.branch)}</td>
+        <div><div style="font-weight:560">${esc(m.name)}</div><div class="tiny dim mono">${m.id} · ${esc(m.service_no)}</div></div></div></td>
+      <td class="small">${esc(m.service_label)}<div class="tiny dim">${esc(m.camp)}</div></td><td class="small">${esc(m.branch)}</td>
       <td class="r num">${money(m.savings)}</td><td class="r num">${money(m.share_capital)}</td>
       <td class="r num">${money(m.outstanding)}</td>
       <td style="width:110px"><div class="meter"><div class="bar thin"><i style="width:${m.reliability}%;background:var(--green)"></i></div>
@@ -24,6 +35,8 @@ export async function members(el, param) {
       <td class="num small">${pct(m.p30, 0)}</td><td>${icon('chevron', 14)}</td></tr>`).join('')}
     </tbody></table></div></div>`;
   $$('[data-m]', el).forEach(r => r.onclick = () => window.go('members', r.dataset.m));
+  $('#mq', el).oninput = e => { mfilter.q = e.target.value; clearTimeout(window._mq); window._mq = setTimeout(() => members(el), 280); };
+  $('#mb', el).onchange = e => { mfilter.branch = e.target.value; members(el); };
 }
 
 // ------------------------------------------------------------ member 360
@@ -32,19 +45,23 @@ async function member360(el, mid) {
   const m = d.member, l = d.lmi;
   el.innerHTML = `
   <div class="page-head">
-    <button class="btn-icon" id="back">${icon('chevron', 16)}</button>
+    <button class="btn-icon" id="back" aria-label="${t('Back')}">${icon('back', 16)}</button>
     <div class="row" style="gap:12px"><div class="avatar lg">${m.initials}</div>
-      <div><h1>${esc(m.name)}</h1><p class="tiny mono">member ${m.id} · ${esc(m.branch)} · since ${date(m.since)}</p></div></div>
+      <div><h1>${esc(m.name)}</h1><p class="tiny">${esc(m.service_label)} · ${esc(m.unit)} · ${esc(m.camp)}</p>
+        <p class="tiny mono">${tt('member', 'ahli')} ${m.id} · ${esc(m.service_no)} · MyKad ${esc(m.mykad)} · ${esc(m.branch)} · ${tt('since', 'sejak')} ${date(m.since)}</p></div></div>
     <div class="spacer"></div>
     ${tag(l.state.state)}
-    <button class="btn" id="outreach">${icon('phone')} Log outreach</button>
+    ${state.user.views.includes('collections') || state.user.views.includes('members') ? `<button class="btn" id="outreach">${icon('phone')} ${tt('Log outreach', 'Rekod hubungan')}</button>` : ''}
   </div>
 
   <div class="grid g5" style="margin-bottom:14px">
-    ${k('Savings', money(m.savings))}${k('Share capital', money(m.share_capital))}
-    ${k('Current financing', money(m.outstanding))}${k('Payment reliability', m.reliability + '%')}
-    ${k('Prior facilities', m.prior_loans)}
+    ${k(t('Savings') + ' · Simpanan', money(m.savings))}${k(t('Share capital') + ' · Modal Syer', money(m.share_capital))}
+    ${k(tt('KT financing outstanding', 'Baki pembiayaan KT'), money(m.outstanding), `${money(m.deduction)}/${tt('month', 'bulan')} · ${esc(m.repayment_channel)}`)}
+    ${k(tt('Salary deductions vs gross', 'Potongan gaji berbanding kasar'), d.external ? (d.external.sola.deduction_ratio ?? '—') + '%' : '—', `${tt('cap', 'had')} 60% · ${tt('headroom', 'ruang')} ${d.external ? money(d.external.sola.monthly_headroom) : '—'}`)}
+    ${k(tt('Compulsory retirement', 'Bersara wajib'), m.retirement_date ? date(m.retirement_date) : tt('Pensioner', 'Pesara'), m.months_to_retirement != null ? `${m.months_to_retirement} ${t('months')}` : '')}
   </div>
+
+  ${d.distress ? distressSection(d.distress, d.distress_context) : ''}
 
   <div class="grid g-2-1" style="margin-bottom:14px">
     <div class="card"><div class="card-h"><h3>Longitudinal payment behaviour</h3>
@@ -94,20 +111,41 @@ async function member360(el, mid) {
       ${l.state.state === 'RECOVERY' ? `<div class="note purple"><b>Recovery ${l.state.recovery_progress}/${l.state.recovery_target}</b>
         <div class="small">Alert closes automatically when criteria are met; the history is retained.</div></div>` : ''}
     </div></div>
-    <div class="card"><div class="card-h"><h3>Savings trajectory</h3></div><div class="card-b">
-      ${lineChart(l.savings_trend.map((v, i) => ({ d: '', v })), { keys: ['v'], h: 120, colors: ['var(--cyan)'] })}
-      <div class="tiny dim">Monthly savings contribution — an independent corroborating source.</div>
+    <div class="card"><div class="card-h"><h3>${tt('Savings contributions', 'Caruman simpanan')}</h3></div><div class="card-b">
+      ${lineChart(l.savings_trend.map((v, i) => ({ d: `M-${l.savings_trend.length - 1 - i}`, v })), { keys: ['v'], labels: [tt('Monthly savings (RM)', 'Simpanan bulanan (RM)')], h: 120, colors: ['var(--cyan)'], unit: 'RM' })}
+      <div class="tiny dim">${tt('Monthly savings contribution — an independent corroborating source.', 'Caruman simpanan bulanan — sumber pengesahan bebas.')}</div>
     </div></div>
   </div>
 
+  ${d.external ? `<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>${tt('External data', 'Data luaran')}</h3>
+    <span class="tag t-amber">${tt('simulated until KT provides sandbox access', 'simulasi sehingga KT memberi akses kotak pasir')}</span></div>
+    <div class="card-b grid g3">
+      <div><div class="up">Experian CCRIS</div><dl class="kv" style="margin-top:6px">
+        <dt>${tt('Facilities', 'Kemudahan')}</dt><dd>${d.external.ccris.facility_count}</dd><dt>${tt('Total outstanding', 'Jumlah tertunggak')}</dt><dd>${money(d.external.ccris.total_outstanding)}</dd>
+        <dt>${tt('Worst arrears (12m)', 'Tunggakan terburuk (12b)')}</dt><dd>${d.external.ccris.max_dpd_12m} ${tt('days', 'hari')}</dd><dt>${tt('Legal', 'Undang-undang')}</dt><dd>${esc(d.external.ccris.legal_status)}</dd></dl></div>
+      <div><div class="up">SOLA</div><dl class="kv" style="margin-top:6px">
+        <dt>${tt('Gross pay', 'Gaji kasar')}</dt><dd>${money(d.external.sola.gross_monthly)}</dd><dt>${tt('Deductions used', 'Potongan digunakan')}</dt><dd>${money(d.external.sola.deductions_used)}</dd>
+        <dt>${tt('Headroom to 60%', 'Ruang hingga 60%')}</dt><dd>${money(d.external.sola.monthly_headroom)}</dd><dt>${tt('Channel', 'Saluran')}</dt><dd>${esc(d.external.sola.channel)}</dd></dl></div>
+      <div><div class="up">eKYC</div><dl class="kv" style="margin-top:6px">
+        <dt>${tt('Status', 'Status')}</dt><dd>${tag(d.external.ekyc.status, d.external.ekyc.status === 'Verified' ? 'green' : 'amber')}</dd>
+        <dt>${tt('Face match', 'Padanan wajah')}</dt><dd>${d.external.ekyc.face_match}</dd><dt>${tt('Liveness', 'Kehidupan')}</dt><dd>${esc(d.external.ekyc.liveness)}</dd></dl>
+        ${d.external.ekyc.note ? `<div class="tiny" style="color:var(--amber)">${esc(d.external.ekyc.note)}</div>` : ''}</div>
+    </div></div>` : ''}
+
+  ${d.crosssell?.length ? `<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>${t('Cross-selling options')}</h3>
+    <span class="sub">${tt('the two best next actions for this member', 'dua tindakan terbaik untuk ahli ini')}</span></div><div class="card-b col" style="gap:8px">
+    ${d.crosssell.slice(0, 3).map(o => `<div class="row wrap" style="gap:10px">${tag(o.product, 'gold')}
+      <div class="chain" style="flex:1">${o.chain.map(c => `<span>${esc(c)}</span>`).join('<i>→</i>')}</div>
+      ${o.contactable ? '' : tag(tt('No contact', 'Jangan hubungi'), 'red')}</div>`).join('')}</div></div>` : ''}
+
   <div class="grid g2">
-    <div class="card"><div class="card-h"><h3>Applications & facilities</h3></div><div class="tw"><table>
+    <div class="card"><div class="card-h"><h3>${tt('Applications & facilities', 'Permohonan & kemudahan')}</h3></div><div class="tw"><table>
       <thead><tr><th>Case</th><th>Product</th><th class="r">Amount</th><th>Status</th><th>Risk</th><th></th></tr></thead>
       <tbody>${d.applications.map(a => `<tr class="clickable" data-c="${a.id}"><td class="mono tiny">${a.id}</td>
         <td class="small">${esc(a.product)}</td><td class="r num">${money(a.amount)}</td>
         <td>${tag(a.status)}</td><td>${tag(a.risk)}</td><td>${icon('chevron', 13)}</td></tr>`).join('')
         || '<tr><td colspan="6" class="dim small">No applications on record.</td></tr>'}</tbody></table></div></div>
-    <div class="card"><div class="card-h"><h3>Communication history</h3></div><div class="card-b">
+    <div class="card"><div class="card-h"><h3>${tt('Communication history', 'Sejarah komunikasi')}</h3></div><div class="card-b">
       <div class="timeline">${d.comms.map(cm => `<div class="tl-item ${cm.type === 'promise' ? 'hot' : ''}">
         <div class="row"><b style="font-size:12.5px">${esc(cm.title)}</b><span class="tiny dim">${dtime(cm.at)}</span></div>
         <div class="small muted">${esc(cm.text)}</div></div>`).join('')
@@ -116,10 +154,48 @@ async function member360(el, mid) {
 
   $('#back', el).onclick = () => window.go('members');
   $$('[data-c]', el).forEach(r => r.onclick = () => window.go('workbench', r.dataset.c));
-  $('#outreach', el).onclick = () => logOutreach(mid, m.name);
+  $('#outreach', el) && ($('#outreach', el).onclick = () => logOutreach(mid, m.name));
 }
 
-const k = (l, v) => `<div class="kpi"><div class="lbl">${l}</div><div class="val" style="font-size:19px">${v}</div></div>`;
+const k = (l, v, sub = '') => `<div class="kpi"><div class="lbl">${l}</div><div class="val" style="font-size:19px">${v}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>`;
+
+// "Possible Bankruptcy" — restricted to Senior Officer, Collections, Risk, Compliance and Branch Manager (POL-013)
+function distressSection(s, ctx) {
+  const tone = { Low: 'green', Watch: 'amber', Elevated: 'amber', High: 'red' }[s.band];
+  const ms = lang() === 'ms';
+  const bandMs = { Low: 'Rendah', Watch: 'Pantau', Elevated: 'Meningkat', High: 'Tinggi' }[s.band];
+  return `<div class="card sens" style="margin-bottom:14px">
+    <div class="card-h">${icon('alert', 15)}<h3>${tt('Possible bankruptcy — financial-distress outlook', 'Kemungkinan bankrap — tinjauan tekanan kewangan')}</h3>
+      <span class="tag t-gold">${icon('lock', 10)} ${tt('restricted · access logged', 'terhad · akses direkod')}</span>
+      <div class="spacer"></div>${tag(ms ? bandMs : s.band, tone)}</div>
+    <div class="card-b grid g3" style="align-items:start">
+      <div class="col" style="gap:10px">
+        <div class="row" style="gap:14px">
+          <div style="width:118px">${gauge(Math.min(1, Math.sqrt(s.probability_12m / 0.25)), { size: 112, label: (s.probability_12m * 100).toFixed(s.probability_12m < 0.01 ? 2 : 1) + '%',
+            sub: tt('12-month', '12 bulan'), color: `var(--${tone})` })}</div>
+          <div class="col" style="gap:3px"><div class="small"><b>${s.multiple_of_base}×</b> ${tt('the ~0.3% national rate for civil servants', 'kadar nasional ~0.3% untuk penjawat awam')}</div>
+            <div class="small muted">${tt('Total debt incl. other lenders', 'Jumlah hutang termasuk pemberi pinjaman lain')}: <b>${money(s.total_debt)}</b></div>
+            <div class="tiny dim">${esc(s.model_version)} · ${tt('trained on', 'dilatih pada')} ${s.trained_on.toLocaleString()} · ${tt('cohort rate', 'kadar kohort')} ${(s.cohort_base_rate * 100).toFixed(2)}%</div></div>
+        </div>
+        <div class="note gold small">${esc(s.guardrail)}</div>
+      </div>
+      <div class="col" style="gap:7px">
+        <div class="up">${tt('What drives it', 'Pemacu utama')}</div>
+        ${s.drivers.length ? s.drivers.map(dv => `<div class="row small" style="gap:8px"><span style="flex:1">${esc(dv.label)}
+          <span class="dim mono">${esc(dv.value)}</span></span><div class="bar thin" style="width:90px"><i style="width:${Math.min(100, dv.contribution * 30)}%;background:var(--red)"></i></div></div>`).join('')
+          : `<div class="small muted">${tt('No material driver — inside normal ranges.', 'Tiada pemacu ketara — dalam julat biasa.')}</div>`}
+        <div class="up" style="margin-top:6px">${tt('Recommended support', 'Sokongan disyorkan')}</div>
+        <ul class="small" style="padding-left:16px;line-height:1.7">${s.actions.map(a => `<li>${esc(a)}</li>`).join('')}</ul>
+      </div>
+      <div class="col" style="gap:7px">
+        <div class="up">${tt('National context', 'Konteks nasional')}</div>
+        <div class="small">${esc(ctx.headline)}</div>
+        ${barChart(ctx.series.map(x => ({ l: x.year, v: x.n })), { h: 110, color: 'var(--gold)' })}
+        <div class="tiny dim">${ctx.sources.map(esc).join('<br/>')}</div>
+        <div class="tiny dim">${esc(ctx.threshold)}</div>
+      </div>
+    </div></div>`;
+}
 
 export function logOutreach(mid, name) {
   drawer(`<h3>Log outreach — ${esc(name)}</h3>`, `
@@ -149,9 +225,9 @@ export async function earlyWarning(el) {
   const buckets = {};
   rows.forEach(r => (buckets[r.state.state] ||= []).push(r));
   el.innerHTML = `
-  <div class="page-head"><div><h1>Early Warning</h1>
-    <p>Members are compared against their <b>own</b> historical baseline, not against a generic borrower.
-       Signals must be corroborated by an independent source before an alert escalates.</p></div>
+  <div class="page-head"><div><h1>${t('Early Warning')}</h1>
+    <p>${tt('Members are compared against their <b>own</b> salary-deduction history, not against a generic borrower. Signals must be corroborated by an independent source — the ANGKASA feed, savings contributions — before an alert escalates.',
+            'Ahli dibandingkan dengan sejarah potongan gaji <b>mereka sendiri</b>. Isyarat mesti disahkan oleh sumber bebas — suapan ANGKASA, caruman simpanan — sebelum amaran ditingkatkan.')}</p></div>
     <div class="spacer"></div>
     ${['AT_RISK', 'ELEVATED', 'WATCH', 'RECOVERY', 'STABLE'].map(s =>
       `<span class="tag t-${toneFor(s)}">${s.replace('_', ' ')} ${(buckets[s] || []).length}</span>`).join('')}
