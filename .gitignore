@@ -1,8 +1,7 @@
+# runtime state: the database, its backups, uploads and generated evidence
+data/
 .venv/
 __pycache__/
-data/cios.db
-data/uploads/
 .DS_Store
 ops/*.log
-data/docs/
 .pytest_cache/
