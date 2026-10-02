@@ -97,14 +97,22 @@ export async function memberPortal(el) {
 
   const chat = $('#chat', el), input = $('#q', el);
   const history = [];
+  let busy = false;
   const send = async q => {
-    if (!q) return;
+    if (!q || busy) return;
+    busy = true;
+    el.querySelectorAll('#q, #send, #sug .chip').forEach(x => x.disabled = true);
     input.value = '';
     chat.insertAdjacentHTML('beforeend', `<div class="msg me">${esc(q)}</div>`);
-    const b = h('<div class="msg ai"><span class="pulse"></span></div>');
+    const b = h('<div class="msg ai"></div>');
+    const t0 = Date.now();
+    const tick = () => { b.innerHTML = `<span class="row small muted" style="gap:8px"><span class="pulse"></span>
+      ${ms() ? 'Menyemak akaun anda' : 'Checking your account'}… <span class="mono tiny">${Math.round((Date.now() - t0) / 1000)} s</span></span>`; };
+    tick(); const timer = setInterval(tick, 1000);
     chat.appendChild(b); chat.scrollTop = chat.scrollHeight;
     try {
       const r = await api('/member-assistant', { method: 'POST', body: { question: q, lang: lang(), history: history.slice(-6) } });
+      clearInterval(timer);
       b.innerHTML = md(r.answer);
       history.push({ role: 'user', content: q }, { role: 'assistant', content: r.answer });
       if (r.handoff) {
@@ -115,6 +123,10 @@ export async function memberPortal(el) {
         chat.insertAdjacentHTML('beforeend', `<button class="chip on" style="align-self:flex-start" data-go="check">${icon('calc', 12)} ${t('Check Before You Borrow')}</button>`);
       chat.querySelectorAll('[data-go]').forEach(x => x.onclick = () => window.go(x.dataset.go));
     } catch (e) { b.textContent = tt('Assistant unavailable: ', 'Pembantu tidak tersedia: ') + e.message; }
+    finally {
+      clearInterval(timer); busy = false;
+      el.querySelectorAll('#q, #send, #sug .chip').forEach(x => x.disabled = false);
+    }
     chat.scrollTop = chat.scrollHeight;
   };
   $('#f', el).onsubmit = e => { e.preventDefault(); send(input.value.trim()); };

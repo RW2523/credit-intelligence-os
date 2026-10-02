@@ -40,28 +40,43 @@ export function chatPanel(host, { appId = null, endpoint = '/assistant', height 
   const chat = $('#chat', host), input = $('#qin', host);
   const scroll = () => { chat.scrollTop = chat.scrollHeight; };
 
+  let busy = false;
+  const setBusy = on => {
+    busy = on;
+    host.querySelectorAll('#qin, #send, #sug .chip').forEach(x => x.disabled = on);
+  };
   const send = q => {
-    if (!q) return;
+    if (!q || busy) return;
+    setBusy(true);
     input.value = '';
     chat.insertAdjacentHTML('beforeend', `<div class="msg me">${esc(q)}</div>`);
     const steps = h('<div class="col" style="gap:5px;align-self:flex-start"></div>');
-    const bubble = h(`<div class="msg ai"><span class="pulse"></span></div>`);
+    const bubble = h(`<div class="msg ai"></div>`);
     chat.append(steps, bubble); scroll();
-    let text = '', charts = [];
-    const paint = () => { bubble.innerHTML = md(text) || '<span class="pulse"></span>'; scroll(); };
+    let text = '', charts = [], stage = tt('Reading your question', 'Membaca soalan anda');
+    const t0 = Date.now();
+    const waiting = () => `<span class="row small muted" style="gap:8px"><span class="pulse"></span>${esc(stage)}…
+      <span class="mono tiny">${Math.round((Date.now() - t0) / 1000)} s</span></span>`;
+    const timer = setInterval(() => { if (!text) bubble.innerHTML = waiting(); }, 1000);
+    const finish = () => { clearInterval(timer); setBusy(false); input.focus(); };
+    const paint = () => { bubble.innerHTML = text ? md(text) : waiting(); scroll(); };
+    paint();
     sse(endpoint, {
-      meta: m => { steps.dataset.model = m.model || ''; },
+      meta: m => { steps.dataset.model = m.model || ''; stage = tt('Deciding which data to look up', 'Menentukan data yang perlu dicari'); paint(); },
       tool: x => {
         const [en, ms] = TOOL_LABEL[x.name] || [x.name, x.name];
         steps.insertAdjacentHTML('beforeend', `<div class="tool-step">${icon(x.ok ? 'check' : 'alert', 11)}
-          ${esc(lang() === 'ms' ? ms : en)} <b>${esc(x.name)}</b> · ${esc(x.summary || '')}</div>`); scroll();
+          ${esc(lang() === 'ms' ? ms : en)} <b>${esc(x.name)}</b> · ${esc(x.summary || '')}</div>`);
+        stage = tt('Writing the answer from that data', 'Menulis jawapan daripada data itu'); paint();
       },
       chart: c => charts.push(c),
-      check: x => steps.insertAdjacentHTML('beforeend', `<div class="tool-step" style="border-color:var(--amber-line)">${icon('alert', 11)}
-        ${tt('Figures not found in the data — asking the model to check', 'Angka tiada dalam data — model diminta menyemak')} (${esc(x.unverified.slice(0, 3).join(', '))})</div>`),
+      check: x => { steps.insertAdjacentHTML('beforeend', `<div class="tool-step" style="border-color:var(--amber-line)">${icon('alert', 11)}
+        ${tt('Figures not found in the data — asking the model to check', 'Angka tiada dalam data — model diminta menyemak')} (${esc(x.unverified.slice(0, 3).join(', '))})</div>`);
+        stage = tt('Re-checking the figures', 'Menyemak semula angka'); },
       token: x => { text += x.t; paint(); },
       replace: x => { text = x.t; paint(); },
       done: d => {
+        finish();
         paint();
         history.push({ role: 'user', content: q }, { role: 'assistant', content: text });
         for (const c of charts) {
@@ -72,6 +87,9 @@ export function chatPanel(host, { appId = null, endpoint = '/assistant', height 
           bubble.insertAdjacentHTML('afterend', `<div class="chat-chart"><div class="ttl">${esc(c.title)}</div>${html}</div>`);
         }
         const g = d.grounding || {};
+        if (!g.figures && d.source !== 'deterministic') {
+          bubble.insertAdjacentHTML('beforeend', `<div class="ground tag t-grey">${icon('info', 11)} ${tt('No figures quoted', 'Tiada angka dinyatakan')}</div>`);
+        }
         if (g.figures) {
           const ok = !g.unverified?.length;
           bubble.insertAdjacentHTML('beforeend', `<div class="ground tag t-${ok ? 'green' : 'amber'}"
@@ -82,7 +100,8 @@ export function chatPanel(host, { appId = null, endpoint = '/assistant', height 
         if (d.source === 'deterministic') bubble.insertAdjacentHTML('beforeend', `<div class="ground tag t-amber">${tt('Model offline — deterministic answer', 'Model luar talian — jawapan deterministik')}</div>`);
         scroll();
       },
-      error: e => { bubble.textContent = tt('Assistant unavailable: ', 'Pembantu tidak tersedia: ') + e.message; },
+      error: e => { finish(); bubble.textContent = tt('Assistant unavailable: ', 'Pembantu tidak tersedia: ') + e.message; },
+      close: () => { if (busy) { finish(); if (!text) bubble.textContent = tt('No answer came back — please try again.', 'Tiada jawapan — sila cuba lagi.'); } },
     }, { method: 'POST', body: { question: q, history: history.slice(-6), application_id: appId, lang: lang() } });
   };
   $('#f', host).onsubmit = e => { e.preventDefault(); send(input.value.trim()); };

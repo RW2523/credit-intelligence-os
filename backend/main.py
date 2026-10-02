@@ -80,6 +80,7 @@ async def _startup():
                                 {"application": a["id"], "member": a["member_id"], "amount": a["amount"]},
                                 at=a["submitted"])
     asyncio.create_task(llm.warm())
+    asyncio.create_task(llm.watchdog())
     if os.environ.get("CIOS_PRERUN_COUNCIL", "1") == "1" and not store.get("council:APP-104233"):
         asyncio.create_task(_prerun_councils())
 
@@ -159,7 +160,8 @@ async def bootstrap(request: Request):
 @app.get("/api/health")
 async def health():
     s = await llm.probe()
-    return {"ok": True, "llm": {k: s.get(k) for k in ("available", "model", "models")},
+    await llm.placement()
+    return {"ok": True, "llm": {k: s.get(k) for k in ("available", "model", "models", "placement")},
             "ledger": store.ledger_verify(), "today": clock.TODAY.isoformat(), "tz": "Asia/Kuala_Lumpur",
             "documents": len(domain.documents()), "members": len(domain.MEMBERS)}
 

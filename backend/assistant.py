@@ -324,13 +324,17 @@ def _rows():
 
 
 def _t_list_applications(user, status="", branch="", product="", missing_docs=None, risk="", limit=25):
+    err = _filter_error(None, product, branch, status)
+    if err:
+        return err
     rows = [r for r in _rows()
             if (not status or status.lower() in r["status"].lower())
             and (not branch or branch.lower() in r["branch"].lower())
             and (not product or product.lower() in r["product"].lower())
             and (not risk or risk.lower() == r["risk"].lower())
             and (missing_docs is None or bool(r["missing"]) == bool(missing_docs))]
-    return {"count": len(rows), "rows": [dict(id=r["id"], name=r["name"], product=r["product"], amount=r["amount"],
+    return {"count": len(rows), "total_amount_rm": round(sum(r["amount"] for r in rows)),
+            "rows": [dict(id=r["id"], name=r["name"], product=r["product"], amount=r["amount"],
                                               branch=r["branch"], status=r["status"], policy=r["policy"], dsr=r["dsr"],
                                               risk=r["risk"], missing=r["missing"], next=r["next"]) for r in rows[:limit]]}
 
@@ -339,19 +343,44 @@ GROUPS = {"branch": "branch", "product": "product", "officer": "officer", "statu
           "service": "service"}
 
 
-def _t_portfolio_breakdown(user, group_by="branch", metric="amount"):
+STATUSES = ["Officer Review", "Documents Pending", "In Verification", "Ready to Approve", "Credit Analysis",
+            "Risk Review", "Enhanced Review", "Fraud Review", "Approved", "Declined", "Escalated"]
+
+
+def _filter_error(rows_all, product, branch, status) -> dict | None:
+    """A filter value that matches nothing is almost always a misreading ("requested" is not a status) — say so,
+    with the valid values, so the model corrects itself instead of reporting that nothing exists."""
+    for name, val, valid in (("product", product, seed.FINANCING), ("branch", branch, seed.BRANCHES),
+                             ("status", status, STATUSES)):
+        if val and not any(val.lower() in v.lower() for v in valid):
+            return {"error": f"{name} '{val}' is not a valid {name}; valid values: {', '.join(valid)}. "
+                             f"Leave {name} out to include everything."}
+    return None
+
+
+def _t_portfolio_breakdown(user, group_by="branch", metric="amount", product="", branch="", status=""):
     key = GROUPS.get(group_by, "branch")
     out = {}
-    for r in _rows():
+    all_rows = _rows()
+    err = _filter_error(all_rows, product, branch, status)
+    if err:
+        return err
+    rows = [r for r in all_rows if (not product or product.lower() in r["product"].lower())
+            and (not branch or branch.lower() in r["branch"].lower())
+            and (not status or status.lower() in r["status"].lower())]
+    for r in rows:
         d = out.setdefault(r[key] or "—", {"count": 0, "amount": 0.0, "pd_w": 0.0, "dsr": 0.0})
         d["count"] += 1; d["amount"] += r["amount"]; d["pd_w"] += r["pd"] * r["amount"]; d["dsr"] += r["dsr"]
     table = {k: {"cases": v["count"], "amount_rm": round(v["amount"]), "pd_pct": round(v["pd_w"] / max(1, v["amount"]) * 100, 2),
                  "avg_dsr_pct": round(v["dsr"] / v["count"], 1)} for k, v in out.items()}
     mkey = {"count": "cases", "amount": "amount_rm", "pd": "pd_pct", "dsr": "avg_dsr_pct"}.get(metric, "amount_rm")
     items = sorted(table.items(), key=lambda kv: -kv[1][mkey])
-    chart = {"type": "bar", "title": f"{mkey.replace('_', ' ')} by {key}", "labels": [k for k, _ in items],
-             "values": [v[mkey] for _, v in items], "unit": "RM" if mkey == "amount_rm" else "%" if "pct" in mkey else ""}
-    return {"group_by": key, "table": dict(items)}, chart
+    flt = ", ".join(f"{k} = {v}" for k, v in (("product", product), ("branch", branch), ("status", status)) if v)
+    chart = {"type": "bar", "title": f"{mkey.replace('_', ' ')} by {key}" + (f" ({flt})" if flt else ""),
+             "labels": [k for k, _ in items], "values": [v[mkey] for _, v in items],
+             "unit": "RM" if mkey == "amount_rm" else "%" if "pct" in mkey else ""}
+    return {"group_by": key, "filter": flt or "none — all live applications", "table": dict(items),
+            "total": {"cases": len(rows), "amount_rm": round(sum(r["amount"] for r in rows))}}, chart
 
 
 def _t_get_case(user, application_id=""):
@@ -466,18 +495,32 @@ def _t_crosssell_overview(user, kind=""):
                                                   why=r["chain"], contactable=r["contactable"]) for r in rows[:10]]}
 
 
-def _t_affordability_check(user, member="", product="Personal Financing-i", amount=20000, term=60):
+def _t_affordability_check(user, member="", product="Personal Financing-i", amount=None, term=60):
+    """Maximum supportable financing for a member, product and tenure — and, if an amount is given, whether
+    that amount fits. Without an amount it reports the maximum and the position at that maximum."""
     m = _find_member(member)
     if not m:
         return {"error": f"no member matching '{member}'"}
-    if product not in seed.PRODUCTS:
+    if product not in seed.FINANCING:
         product = "Personal Financing-i"
-    app = dict(product=product, amount=float(amount), term=int(term), existing_commitments=m["financing_deductions"])
-    p = policy_engine.assess(app, m, {})
-    return dict(member=m["name"], product=product, amount=amount, term=term, instalment=p["instalment"],
-                dsr=p["dsr"], dsr_ceiling=p["dsr_ceiling"], deduction_ratio=p["deduction_ratio"],
-                result=p["result"], failures=p["failures"], max_financing=p["max_financing"],
-                binding_limit=p["max_financing_binding_label"])
+    prod = seed.PRODUCTS[product]
+    term = max(prod["min_term"], min(prod["max_term"], int(term or 60)))
+    base = dict(product=product, term=term, existing_commitments=m["financing_deductions"])
+    probe = policy_engine.assess(dict(base, amount=float(prod["min"])), m, {})
+    mx = probe["max_financing"]
+    out = dict(member=m["name"], member_id=m["id"], product=product, term_months=term, profit_rate_flat=prod["rate"],
+               max_financing=mx, binding_limit=probe["max_financing_binding_label"],
+               explanation=policy_engine.max_financing_explanation(probe, None),
+               existing_monthly_financing=m["financing_deductions"], gross_monthly=m["gross_monthly"])
+    if mx > 0:
+        at = policy_engine.assess(dict(base, amount=float(mx)), m, {})
+        out.update(instalment_at_max=at["instalment"], dsr_at_max=at["dsr"], dsr_ceiling=at["dsr_ceiling"],
+                   deduction_ratio_at_max=at["deduction_ratio"])
+    if amount:
+        req = policy_engine.assess(dict(base, amount=float(amount)), m, {})
+        out.update(requested_amount=float(amount), requested_instalment=req["instalment"], requested_result=req["result"],
+                   requested_failures=req["failures"], requested_dsr=req["dsr"])
+    return out
 
 
 def _fn(name, desc, props=None, req=None):
@@ -489,13 +532,19 @@ def _fn(name, desc, props=None, req=None):
 TOOLS = {
     "list_applications": (_t_list_applications, ("applications",), _fn(
         "list_applications", "List live financing applications, optionally filtered.",
-        {"status": {"type": "string"}, "branch": {"type": "string"}, "product": {"type": "string"},
+        {"status": {"type": "string", "enum": STATUSES}, "branch": {"type": "string", "enum": seed.BRANCHES},
+         "product": {"type": "string", "enum": seed.FINANCING},
          "missing_docs": {"type": "boolean", "description": "true = only cases still waiting on documents"},
          "risk": {"type": "string", "enum": ["Low", "Moderate", "Elevated", "High"]}})),
     "portfolio_breakdown": (_t_portfolio_breakdown, ("overview", "cockpit", "applications"), _fn(
-        "portfolio_breakdown", "Aggregate live applications by a dimension; returns a table and a chart.",
+        "portfolio_breakdown", "Aggregate ALL live applications (every one is a financing request) by a dimension, "
+        "optionally for one product or branch; returns a table and a chart. For questions about statuses use "
+        "group_by='status'.",
         {"group_by": {"type": "string", "enum": list(GROUPS)},
-         "metric": {"type": "string", "enum": ["count", "amount", "pd", "dsr"]}}, ["group_by"])),
+         "metric": {"type": "string", "enum": ["count", "amount", "pd", "dsr"]},
+         "product": {"type": "string", "enum": seed.FINANCING, "description": "only if the user names a product"},
+         "branch": {"type": "string", "enum": seed.BRANCHES, "description": "only if the user names a branch"}},
+        ["group_by"])),
     "get_case": (_t_get_case, ("applications", "workbench"), _fn(
         "get_case", "Full deterministic facts for one application (policy, affordability, risk, documents).",
         {"application_id": {"type": "string", "description": "e.g. APP-104310"}}, ["application_id"])),
@@ -525,9 +574,12 @@ TOOLS = {
         "crosssell_overview", "AI cross-selling suggestions: takaful, financing and retention opportunities.",
         {"kind": {"type": "string", "enum": ["takaful", "financing", "retention", "rahnu", "advice"]}})),
     "affordability_check": (_t_affordability_check, ("applications", "members"), _fn(
-        "affordability_check", "Run KT's affordability engine for a member, product, amount and tenure.",
+        "affordability_check", "How much a member could borrow: KT's affordability engine gives the maximum supportable "
+        "financing for a product and tenure, the binding limit, and — if an amount is given — whether it fits. Takes a "
+        "member name or number directly; no need to look the member up first.",
         {"member": {"type": "string"}, "product": {"type": "string", "enum": seed.FINANCING},
-         "amount": {"type": "number"}, "term": {"type": "integer"}}, ["member"])),
+         "amount": {"type": "number", "description": "only if the user named an amount"},
+         "term": {"type": "integer", "description": "months"}}, ["member"])),
 }
 
 
@@ -542,6 +594,20 @@ def tools_for(user: dict) -> dict:
     return allowed
 
 
+def mentioned_members(question: str, limit: int = 3) -> list[dict]:
+    """Members named in a question, with or without rank — "Sjn Udara Nurul Huda", "Nurul Huda", "104402"."""
+    q = f" {question.lower()} "
+    hits = []
+    for m in domain.MEMBERS.values():
+        full = m["full_name"].lower().replace("dato' ", "").replace("hj. ", "")
+        given = m["given_name"].lower()
+        if f" {m['id']} " in q or full in q or (len(given.split()) >= 2 and given in q) or \
+                (len(given) >= 5 and f" {given} " in q and m["full_name"].split()[-1].lower() in q):
+            hits.append(m)
+    hits.sort(key=lambda m: -len(m["given_name"]))
+    return hits[:limit]
+
+
 def _staff_system(user: dict, lng: str, case: dict | None) -> str:
     base = (f"You are KT Assistant, the analyst inside KT Credit Intelligence for Koperasi Tentera (Koperasi Angkatan "
             f"Tentera Malaysia Berhad), a credit co-operative for Armed Forces personnel, MINDEF civil servants and "
@@ -549,10 +615,11 @@ def _staff_system(user: dict, lng: str, case: dict | None) -> str:
             "For ANY question about counts, amounts, members, cases, branches, products, trends or policy you MUST call a "
             "tool first — answering such a question without a tool call is an error, and every figure you write must "
             "appear in a tool result. KT's branches are Kuala Lumpur, Sungai Besi, Lumut, Kuantan, Kota Kinabalu and Kok "
-            "Lanas. Islamic financing vocabulary: 'financing' not 'loan', 'profit rate' not 'interest', 'takaful' "
+            "Lanas. When the user names a member, call the tools with that name or number straight away — never ask "
+            "for the member number first. Islamic financing vocabulary: 'financing' not 'loan', 'profit rate' not 'interest', 'takaful' "
             "not 'insurance'. Amounts as RM12,345. Lead with the direct answer in one or two sentences; when listing "
             "more than three items use a compact markdown table; finish with one line starting 'Source:' naming the "
-            "data you used. You support decisions — officers decide; never state a final credit decision. ")
+            "data you used. Never add up or calculate figures yourself — quote the totals the tools return. You support decisions — officers decide; never state a final credit decision. ")
     if user["role"] == "board":
         base += "This user is on the Board: report aggregates, not individual members. "
     base += ("Reply in Bahasa Malaysia. " + L.STYLE_MS) if lng == "ms" else "Reply in English."
@@ -603,27 +670,40 @@ async def staff_agent(user: dict, question: str, history: list | None = None, ca
     for h in (history or [])[-6:]:
         if h.get("role") in ("user", "assistant") and h.get("content"):
             msgs.append({"role": h["role"], "content": str(h["content"])[:1200]})
-    msgs.append({"role": "user", "content": question})
+    named = mentioned_members(question) if "get_member" in tools or "affordability_check" in tools else []
+    hint = ("\n\n(Members named in this question: " + "; ".join(f"{m['name']} — member no. {m['id']}" for m in named)
+            + ". Pass the member number to the tools; do not ask the user for it.)") if named else ""
+    msgs.append({"role": "user", "content": question + hint})
     specs = [spec for _, spec in tools.values()]
     sources.append(question)
     answer, called, corrections, last_result = "", [], 0, None
     try:
         for _round in range(7):
-            calls, text = [], ""
+            calls, text, streamed = [], "", False
+            live = bool(called) or case is not None              # data already in hand: show the answer as it forms
             async for kind, val in llm.chat(msgs, tools=specs, temperature=0.15, num_predict=900):
                 if kind == "tool_calls":
                     calls += val
                 else:
                     text += val
+                    if live and not calls:
+                        streamed = True
+                        yield "token", {"t": val}
+            if calls and streamed:
+                yield "replace", {"t": ""}                    # a preamble before a tool call is not the answer
             if not calls:
                 # nothing reaches the person until its figures trace back to tool output or the case file
                 g = grounding(text, sources)
                 # with a case file loaded the context itself is the source, so it counts as a lookup
                 looked_up = bool(called) or case is not None
-                bad = g["unverified"] and (not looked_up or len(g["unverified"]) > max(1, g["figures"] // 5))
+                # a small derived number may pass; an amount the data does not contain never does
+                big = [x for x in g["unverified"] if float(x.replace(",", "")) >= 100]
+                bad = g["unverified"] and (not looked_up or big or len(g["unverified"]) > max(1, g["figures"] // 5))
                 if bad and corrections < 2:
                     corrections += 1
                     yield "check", {"unverified": g["unverified"], "retry": corrections}
+                    if streamed:
+                        yield "replace", {"t": ""}
                     msgs += [{"role": "assistant", "content": text},
                              {"role": "user", "content": ("Jawapan itu mengandungi angka yang tiada dalam data alat: " if lng == "ms"
                               else "That answer contains figures that are not in any tool result: ") + ", ".join(g["unverified"])
@@ -637,6 +717,14 @@ async def staff_agent(user: dict, question: str, history: list | None = None, ca
                                 "Saya tidak dapat mengesahkan angka bagi soalan itu dengan data. Sila tanya dengan lebih khusus "
                                 "(contohnya mengikut cawangan, produk atau nombor kes)."))
                 answer = text
+                if streamed and not bad:
+                    if lng == "ms" and L.indonesian_hits(answer):
+                        yield "replace", {"t": L.normalise_ms(answer)}
+                    yield "done", {"grounding": grounding(answer, sources), "source": "llm", "tools": called,
+                                   "corrections": corrections}
+                    return
+                if streamed:
+                    yield "replace", {"t": ""}
                 break
             msgs.append({"role": "assistant", "content": text, "tool_calls": calls})
             for call in calls[:4]:
@@ -702,6 +790,10 @@ def _from_tool(last: tuple, lng: str) -> str:
 def _summarise(name: str, result: dict) -> str:
     if "error" in result:
         return result["error"]
+    if name == "affordability_check":
+        return f"{result['member']}: maximum {rm(result['max_financing'])} over {result['term_months']} months ({result['binding_limit']})"
+    if name == "get_member":
+        return f"{result.get('name')} — {result.get('service', '')}, {result.get('branch', '')}"
     if "count" in result:
         return f"{result['count']} result(s)"
     if "table" in result:

@@ -28,6 +28,7 @@ serves <http://127.0.0.1:8899>.
 | `CIOS_RESET=1 ./run.sh` | start from a clean database (re-anchors the demo to today) |
 | `CIOS_TODAY=2026-10-15` | freeze "today" to the demo day; every seeded date and new event moves with it |
 | `CIOS_MODEL` | main model for every assistant and the Council (default `qwen3:30b`) |
+| `CIOS_NUM_CTX` | context size to request; unset (default) uses the Ollama server's default so every app sharing the model asks for the same thing |
 | `CIOS_FAST_MODEL` | fallback model (default `llama3.2:3b`) |
 | `CIOS_COUNCIL_MODEL` | optional separate model for the six Council calls |
 | `CIOS_DEMO=0` | hide the demo accounts on the sign-in page |
@@ -90,6 +91,24 @@ ops/status.sh        # service, model, public endpoint
 ops/smoke.sh http://127.0.0.1:8899           # HTTP smoke test (SMOKE_LLM=1 adds the model paths)
 ops/bench_llm.sh     # tokens/s and latency per model
 ```
+
+### If the assistants are slow
+
+`ops/status.sh` shows where the model runs. It should say **on GPU** (≈90 tokens/s on the Spark). If it
+says **on CPU** (≈3 tokens/s, 30–40 s per answer), the Ollama container has lost GPU access — inside it
+`nvidia-smi` fails with "Failed to initialize NVML: Unknown Error", a known Docker/NVIDIA issue. Restart it:
+
+```bash
+docker restart cios-ollama
+```
+
+The top bar also turns the model chip amber ("· CPU") when this happens. A permanent host-level fix for the
+GPU dropout is to run Docker with the `cgroupfs` cgroup driver or use the NVIDIA Container Toolkit's CDI
+device mode.
+
+The Ollama container is shared with another application that uses the same qwen3 model. KT shares that one
+loaded instance (it requests no context size of its own): requesting a different size would make Ollama reload
+the 18 GB model each time the two apps alternate, and a second copy does not fit beside the vision model.
 
 ## Tests
 

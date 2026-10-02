@@ -154,8 +154,9 @@ function shell() {
         <div id="sresults"></div>
       </div>` : '<div style="flex:1"></div>'}
       <div class="top-actions">
-        ${u.role !== 'member' ? `<span class="tag t-${llmOk ? 'green' : 'amber'}" title="${tt('Local AI model on this machine', 'Model AI tempatan')}">
-          ${icon('cpu', 12)} ${llmOk ? esc(shortModel(state.boot.llm.model)) : 'deterministic mode'}</span>
+        ${u.role !== 'member' ? `<span class="tag t-${llmOk && state.boot.llm.placement !== 'cpu' ? 'green' : 'amber'}"
+          title="${state.boot.llm.placement === 'cpu' ? tt('The model is running on the CPU — answers will be slow. Restart the Ollama container to restore the GPU.', 'Model berjalan pada CPU — jawapan perlahan.') : tt('Local AI model on this machine', 'Model AI tempatan')}">
+          ${icon('cpu', 12)} ${llmOk ? esc(shortModel(state.boot.llm.model)) + (state.boot.llm.placement === 'cpu' ? ' · CPU' : '') : 'deterministic mode'}</span>
         <span class="tag t-${state.boot.autonomy?.kill_switch ? 'red' : 'purple'}" title="Autonomy Dial">${icon('power', 12)} ${state.boot.autonomy?.kill_switch ? 'STOPPED' : esc(state.boot.autonomy?.mode || '')}</span>` : ''}
         <span class="tag t-grey" title="${tt('Demo day — Malaysia time (UTC+8)', 'Hari demo — waktu Malaysia (UTC+8)')}">${icon('clock', 12)} ${esc(dtime(state.boot.now).replace(/,? \d\d:\d\d.*/, ''))} · MYT</span>
         <div class="lang-sw" role="group" aria-label="${t('Language')}">
@@ -169,7 +170,7 @@ function shell() {
     <main class="content" id="content"><div class="center"><div class="spin"></div></div></main>
   </div>`;
 }
-const shortModel = m => String(m || '').replace(/-a3b-instruct-2507-q4_K_M$/, '').replace(/-instruct.*$/, '');
+const shortModel = m => String(m || '').replace(/-a3b-instruct-2507-q4_K_M$/, '').replace(/-instruct.*$/, '').replace(/^kt-/, '');
 
 // ---------------------------------------------------------------- render
 export async function render() {
