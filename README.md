@@ -92,23 +92,26 @@ ops/smoke.sh http://127.0.0.1:8899           # HTTP smoke test (SMOKE_LLM=1 adds
 ops/bench_llm.sh     # tokens/s and latency per model
 ```
 
-### If the assistants are slow
+### The GPU and the shared Ollama container
 
-`ops/status.sh` shows where the model runs. It should say **on GPU** (≈90 tokens/s on the Spark). If it
-says **on CPU** (≈3 tokens/s, 30–40 s per answer), the Ollama container has lost GPU access — inside it
-`nvidia-smi` fails with "Failed to initialize NVML: Unknown Error", a known Docker/NVIDIA issue. Restart it:
+The models run in the Docker container `cios-ollama`, created by `ops/ollama-container.sh` (run it again to
+recreate it; the models live in the `cios_ollama` volume). It declares the NVIDIA device nodes explicitly.
+That matters on this host: Docker uses the systemd cgroup driver, and with `--gpus all` alone the devices are
+injected outside the container's declared list, so any `systemctl daemon-reload` — snapd runs one on every
+snap refresh — strips the container's GPU access ("Failed to initialize NVML: Unknown Error" inside it) and
+every model it loads afterwards runs on the CPU, about 30x slower. With the devices declared, a reload keeps
+them.
 
 ```bash
-docker restart cios-ollama
+ops/status.sh                     # includes the GPU check
+ops/ollama-container.sh --check   # allow-list and GPU access inside the container
 ```
 
-The top bar also turns the model chip amber ("· CPU") when this happens. A permanent host-level fix for the
-GPU dropout is to run Docker with the `cgroupfs` cgroup driver or use the NVIDIA Container Toolkit's CDI
-device mode.
+The model chip in the top bar turns amber ("· CPU") if the model is ever running on the CPU.
 
-The Ollama container is shared with another application that uses the same qwen3 model. KT shares that one
-loaded instance (it requests no context size of its own): requesting a different size would make Ollama reload
-the 18 GB model each time the two apps alternate, and a second copy does not fit beside the vision model.
+The container is shared with another application that uses the same qwen3 model. KT shares that one loaded
+instance (it requests no context size of its own): requesting a different size would make Ollama reload the
+18 GB model each time the two apps alternate, and a second copy does not fit beside the vision model.
 
 ## Tests
 

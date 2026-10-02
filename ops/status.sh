@@ -4,6 +4,9 @@ printf '  %-14s %s\n' "cios" "$(systemctl --user is-active cios 2>/dev/null) / $
 if systemctl is-active --quiet ollama 2>/dev/null; then o="active (system service)";
 elif pgrep -x ollama >/dev/null || pgrep -f "ollama serve" >/dev/null; then o="running (process)"; else o="not running"; fi
 printf '  %-14s %s\n' "ollama" "$o"
+if command -v docker >/dev/null 2>&1 && docker inspect cios-ollama >/dev/null 2>&1; then
+  "$(dirname "$0")/ollama-container.sh" --check | sed 's/^  /  gpu            /' | sed 's/gpu            device allow-list:/gpu            allow-list:/'
+fi
 H=$(curl -s -m 10 http://127.0.0.1:${PORT:-8899}/api/health)
 printf '  %-14s %s\n' "local" "$( [ -n "$H" ] && echo "$H" | python3 -c 'import sys,json; d=json.load(sys.stdin); print("ok · model", d["llm"]["model"], "on", d["llm"].get("placement", "?").upper(), "· today", d["today"], "· ledger", "intact" if d["ledger"]["intact"] else "BROKEN"); d["llm"].get("placement") == "cpu" and print("  WARNING: the model is on the CPU (~30x slower). The Ollama container has lost GPU access - restart it: docker restart cios-ollama")' || echo down)"
 if command -v tailscale >/dev/null 2>&1 && tailscale funnel status 2>/dev/null | grep -q "Funnel on"; then
